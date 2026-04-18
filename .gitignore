@@ -15,7 +15,6 @@ test_*.php
 update_user_numbers.php
 
 # その他
-data/
 *.csv
 
 # 内部gitリポジトリのバックアップ（無視）
