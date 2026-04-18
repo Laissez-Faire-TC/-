@@ -1,0 +1,22 @@
+# 認証情報を含む設定ファイル（サーバーで直接管理）
+config/database.php
+config/mail.php
+config/ai.php
+
+# Composer依存パッケージ
+vendor/
+
+# アップロードファイル
+uploads/
+
+# デバッグ・テスト用スクリプト
+debug_*.php
+test_*.php
+update_user_numbers.php
+
+# その他
+data/
+*.csv
+
+# 内部gitリポジトリのバックアップ（無視）
+**/.git.bak/
