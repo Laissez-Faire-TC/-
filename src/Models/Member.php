@@ -107,6 +107,12 @@ class Member
             $params[] = $filters['gender'];
         }
 
+        // フィルタ: 学科
+        if (isset($filters['department']) && $filters['department'] !== '') {
+            $where[] = "department = ?";
+            $params[] = $filters['department'];
+        }
+
         // フィルタ: 年度
         if (isset($filters['academic_year']) && $filters['academic_year'] !== '') {
             $where[] = "academic_year = ?";

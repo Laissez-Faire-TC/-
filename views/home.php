@@ -40,9 +40,7 @@
     <div class="news-quick-nav">
         <div class="quick-nav-inner">
             <h4>Latest News</h4>
-            <ul>
-                <li><a href="#news-ski">2026.02.05 - スキー合宿報告を公開しました！</a></li>
-            </ul>
+            <ul></ul>
         </div>
     </div>
 

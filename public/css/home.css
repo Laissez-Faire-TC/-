@@ -806,10 +806,9 @@ body {
 /* Newsの広がりを抑える */
 .news-grid {
     display: grid;
-    /* 1枚だけなら横に広がらないように最大幅を指定 */
-    max-width: 400px;
-    grid-template-columns: repeat(auto-fit, 300px);
-    margin: 20px 0 0; /* 中央寄せ */
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    max-width: 1000px;
+    margin: 20px 0 0;
     gap: 20px;
 }
 

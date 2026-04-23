@@ -12,6 +12,9 @@
         </div>
     </div>
     <div>
+        <button class="btn btn-outline-success me-2" onclick="exportExcel()">
+            <i class="bi bi-file-earmark-excel"></i> Excel出力
+        </button>
         <button class="btn btn-outline-primary me-2" onclick="showImportModal()">
             <i class="bi bi-upload"></i> インポート
         </button>
@@ -55,6 +58,14 @@
                 </select>
             </div>
             <div class="col-md-2">
+                <label class="form-label">性別</label>
+                <select class="form-select" id="filterGender" onchange="loadMembers()">
+                    <option value="">すべて</option>
+                    <option value="male">男性</option>
+                    <option value="female">女性</option>
+                </select>
+            </div>
+            <div class="col-md-2">
                 <label class="form-label">ステータス</label>
                 <select class="form-select" id="filterStatus" onchange="loadMembers()">
                     <option value="">すべて</option>
@@ -64,7 +75,38 @@
                     <option value="withdrawn">退会</option>
                 </select>
             </div>
-            <div class="col-md-2 d-flex align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">学科</label>
+                <select class="form-select" id="filterDepartment" onchange="loadMembers()">
+                    <option value="">すべて</option>
+                    <optgroup label="基幹理工学部">
+                        <option value="数学科">数学科</option>
+                        <option value="応用数理学科">応用数理学科</option>
+                        <option value="機械科学・航空宇宙学科">機械科学・航空宇宙学科</option>
+                        <option value="電子物理システム学科">電子物理システム学科</option>
+                        <option value="情報理工学科">情報理工学科</option>
+                        <option value="情報通信学科">情報通信学科</option>
+                        <option value="表現工学科">表現工学科</option>
+                    </optgroup>
+                    <optgroup label="創造理工学部">
+                        <option value="建築学科">建築学科</option>
+                        <option value="総合機械工学科">総合機械工学科</option>
+                        <option value="経営システム工学科">経営システム工学科</option>
+                        <option value="社会環境工学科">社会環境工学科</option>
+                        <option value="環境資源工学科">環境資源工学科</option>
+                        <option value="社会文化領域">社会文化領域</option>
+                    </optgroup>
+                    <optgroup label="先進理工学部">
+                        <option value="物理学科">物理学科</option>
+                        <option value="応用物理学科">応用物理学科</option>
+                        <option value="化学・生命化学科">化学・生命化学科</option>
+                        <option value="応用化学科">応用化学科</option>
+                        <option value="生命医科学科">生命医科学科</option>
+                        <option value="電気・情報生命工学科">電気・情報生命工学科</option>
+                    </optgroup>
+                </select>
+            </div>
+            <div class="col-md-1 d-flex align-items-end">
                 <button class="btn btn-outline-secondary w-100" onclick="resetFilters()">
                     リセット
                 </button>
@@ -77,11 +119,6 @@
 <div class="row mb-3 align-items-center">
     <div class="col-md-6">
         <span id="memberCount" class="text-muted">読み込み中...</span>
-        <span class="ms-3">
-            <a href="/index.php?route=members/pending" class="text-decoration-none">
-                <span class="badge bg-warning" id="pendingBadge" style="display:none;">新規入会者: <span id="pendingCount">0</span>件</span>
-            </a>
-        </span>
     </div>
     <div class="col-md-6 d-flex justify-content-end gap-2 flex-wrap">
         <!-- 第1ソート -->
@@ -425,8 +462,156 @@
 </div>
 
 
+<!-- Excel出力モーダル -->
+<div class="modal fade" id="exportModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-file-earmark-excel"></i> Excel出力設定</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- 絞り込み -->
+                <h6 class="fw-bold mb-3">絞り込み条件</h6>
+                <div class="row g-3 mb-4">
+                    <div class="col-md-4">
+                        <label class="form-label">年度</label>
+                        <select class="form-select" id="exportYear"></select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">ステータス</label>
+                        <select class="form-select" id="exportStatus">
+                            <option value="">すべて</option>
+                            <option value="active">現役</option>
+                            <option value="pending">承認待ち</option>
+                            <option value="ob_og">OB/OG</option>
+                            <option value="withdrawn">退会</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">学年</label>
+                        <select class="form-select" id="exportGrade">
+                            <option value="">すべて</option>
+                            <option value="1">1年</option>
+                            <option value="2">2年</option>
+                            <option value="3">3年</option>
+                            <option value="4">4年</option>
+                            <option value="M1">M1</option>
+                            <option value="M2">M2</option>
+                            <option value="OB">OB</option>
+                            <option value="OG">OG</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">性別</label>
+                        <select class="form-select" id="exportGender">
+                            <option value="">すべて</option>
+                            <option value="male">男性</option>
+                            <option value="female">女性</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">学部</label>
+                        <select class="form-select" id="exportFaculty">
+                            <option value="">すべて</option>
+                            <option value="基幹理工学部">基幹理工学部</option>
+                            <option value="創造理工学部">創造理工学部</option>
+                            <option value="先進理工学部">先進理工学部</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">学科</label>
+                        <select class="form-select" id="exportDepartment">
+                            <option value="">すべて</option>
+                            <optgroup label="基幹理工学部">
+                                <option value="数学科">数学科</option>
+                                <option value="応用数理学科">応用数理学科</option>
+                                <option value="機械科学・航空宇宙学科">機械科学・航空宇宙学科</option>
+                                <option value="電子物理システム学科">電子物理システム学科</option>
+                                <option value="情報理工学科">情報理工学科</option>
+                                <option value="情報通信学科">情報通信学科</option>
+                                <option value="表現工学科">表現工学科</option>
+                            </optgroup>
+                            <optgroup label="創造理工学部">
+                                <option value="建築学科">建築学科</option>
+                                <option value="総合機械工学科">総合機械工学科</option>
+                                <option value="経営システム工学科">経営システム工学科</option>
+                                <option value="社会環境工学科">社会環境工学科</option>
+                                <option value="環境資源工学科">環境資源工学科</option>
+                                <option value="社会文化領域">社会文化領域</option>
+                            </optgroup>
+                            <optgroup label="先進理工学部">
+                                <option value="物理学科">物理学科</option>
+                                <option value="応用物理学科">応用物理学科</option>
+                                <option value="化学・生命化学科">化学・生命化学科</option>
+                                <option value="応用化学科">応用化学科</option>
+                                <option value="生命医科学科">生命医科学科</option>
+                                <option value="電気・情報生命工学科">電気・情報生命工学科</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                </div>
+
+                <hr>
+
+                <!-- 出力列の選択・並び替え -->
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div>
+                        <h6 class="fw-bold mb-0">出力する項目・順番</h6>
+                        <small class="text-muted">☰ をドラッグして順番を変更できます</small>
+                    </div>
+                    <div>
+                        <button class="btn btn-outline-secondary btn-sm me-1" onclick="exportCheckAll(true)">すべて選択</button>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="exportCheckAll(false)">すべて解除</button>
+                    </div>
+                </div>
+                <style>
+                .export-col-item {
+                    display: flex; align-items: center; gap: 8px;
+                    padding: 6px 10px; margin-bottom: 4px;
+                    background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px;
+                    cursor: default; user-select: none;
+                }
+                .export-col-item.dragging { opacity: 0.4; }
+                .export-col-item.drag-over { border-color: #0d6efd; background: #e8f0fe; }
+                .drag-handle { cursor: grab; color: #adb5bd; font-size: 1rem; flex-shrink: 0; }
+                .drag-handle:active { cursor: grabbing; }
+                #exportColumnList { list-style: none; padding: 0; margin: 0; }
+                </style>
+                <ul id="exportColumnList">
+                    <li class="export-col-item" draggable="true" data-key="name_kanji"><span class="drag-handle">☰</span><input class="form-check-input export-col" type="checkbox" id="ecol_name_kanji" value="name_kanji" checked><label class="mb-0" for="ecol_name_kanji">氏名（漢字）</label></li>
+                    <li class="export-col-item" draggable="true" data-key="name_kana"><span class="drag-handle">☰</span><input class="form-check-input export-col" type="checkbox" id="ecol_name_kana" value="name_kana" checked><label class="mb-0" for="ecol_name_kana">氏名（カナ）</label></li>
+                    <li class="export-col-item" draggable="true" data-key="gender"><span class="drag-handle">☰</span><input class="form-check-input export-col" type="checkbox" id="ecol_gender" value="gender" checked><label class="mb-0" for="ecol_gender">性別</label></li>
+                    <li class="export-col-item" draggable="true" data-key="grade"><span class="drag-handle">☰</span><input class="form-check-input export-col" type="checkbox" id="ecol_grade" value="grade" checked><label class="mb-0" for="ecol_grade">学年</label></li>
+                    <li class="export-col-item" draggable="true" data-key="faculty"><span class="drag-handle">☰</span><input class="form-check-input export-col" type="checkbox" id="ecol_faculty" value="faculty" checked><label class="mb-0" for="ecol_faculty">学部</label></li>
+                    <li class="export-col-item" draggable="true" data-key="department"><span class="drag-handle">☰</span><input class="form-check-input export-col" type="checkbox" id="ecol_department" value="department" checked><label class="mb-0" for="ecol_department">学科</label></li>
+                    <li class="export-col-item" draggable="true" data-key="student_id"><span class="drag-handle">☰</span><input class="form-check-input export-col" type="checkbox" id="ecol_student_id" value="student_id" checked><label class="mb-0" for="ecol_student_id">学籍番号</label></li>
+                    <li class="export-col-item" draggable="true" data-key="phone"><span class="drag-handle">☰</span><input class="form-check-input export-col" type="checkbox" id="ecol_phone" value="phone" checked><label class="mb-0" for="ecol_phone">電話番号</label></li>
+                    <li class="export-col-item" draggable="true" data-key="email"><span class="drag-handle">☰</span><input class="form-check-input export-col" type="checkbox" id="ecol_email" value="email" checked><label class="mb-0" for="ecol_email">メールアドレス</label></li>
+                    <li class="export-col-item" draggable="true" data-key="line_name"><span class="drag-handle">☰</span><input class="form-check-input export-col" type="checkbox" id="ecol_line_name" value="line_name" checked><label class="mb-0" for="ecol_line_name">LINE名</label></li>
+                    <li class="export-col-item" draggable="true" data-key="status"><span class="drag-handle">☰</span><input class="form-check-input export-col" type="checkbox" id="ecol_status" value="status" checked><label class="mb-0" for="ecol_status">ステータス</label></li>
+                    <li class="export-col-item" draggable="true" data-key="enrollment_year"><span class="drag-handle">☰</span><input class="form-check-input export-col" type="checkbox" id="ecol_enrollment_year" value="enrollment_year"><label class="mb-0" for="ecol_enrollment_year">入学年度</label></li>
+                    <li class="export-col-item" draggable="true" data-key="academic_year"><span class="drag-handle">☰</span><input class="form-check-input export-col" type="checkbox" id="ecol_academic_year" value="academic_year"><label class="mb-0" for="ecol_academic_year">年度</label></li>
+                    <li class="export-col-item" draggable="true" data-key="birthdate"><span class="drag-handle">☰</span><input class="form-check-input export-col" type="checkbox" id="ecol_birthdate" value="birthdate"><label class="mb-0" for="ecol_birthdate">生年月日</label></li>
+                    <li class="export-col-item" draggable="true" data-key="allergy"><span class="drag-handle">☰</span><input class="form-check-input export-col" type="checkbox" id="ecol_allergy" value="allergy"><label class="mb-0" for="ecol_allergy">アレルギー</label></li>
+                    <li class="export-col-item" draggable="true" data-key="emergency_contact"><span class="drag-handle">☰</span><input class="form-check-input export-col" type="checkbox" id="ecol_emergency_contact" value="emergency_contact"><label class="mb-0" for="ecol_emergency_contact">緊急連絡先</label></li>
+                    <li class="export-col-item" draggable="true" data-key="address"><span class="drag-handle">☰</span><input class="form-check-input export-col" type="checkbox" id="ecol_address" value="address"><label class="mb-0" for="ecol_address">住所</label></li>
+                    <li class="export-col-item" draggable="true" data-key="sns_allowed"><span class="drag-handle">☰</span><input class="form-check-input export-col" type="checkbox" id="ecol_sns_allowed" value="sns_allowed"><label class="mb-0" for="ecol_sns_allowed">SNS投稿可否</label></li>
+                    <li class="export-col-item" draggable="true" data-key="sports_registration_no"><span class="drag-handle">☰</span><input class="form-check-input export-col" type="checkbox" id="ecol_sports_registration_no" value="sports_registration_no"><label class="mb-0" for="ecol_sports_registration_no">都営登録番号</label></li>
+                </ul>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-success" onclick="doExportExcel()">
+                    <i class="bi bi-file-earmark-excel"></i> ダウンロード
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
-let memberModal, importModal, newYearModal;
+let memberModal, importModal, newYearModal, exportModal;
 let currentPage = 1;
 let searchTimeout;
 let allLoadedMembers = [];
@@ -485,6 +670,7 @@ document.addEventListener('DOMContentLoaded', () => {
     memberModal = new bootstrap.Modal(document.getElementById('memberModal'));
     importModal = new bootstrap.Modal(document.getElementById('importModal'));
     newYearModal = new bootstrap.Modal(document.getElementById('newYearModal'));
+    exportModal = new bootstrap.Modal(document.getElementById('exportModal'));
 
     // 学籍番号の例示を現在年度の下2桁で生成
     const yy = String(new Date().getFullYear()).slice(-2);
@@ -575,6 +761,8 @@ async function loadMembers() {
         search: document.getElementById('searchQuery').value,
         grade: document.getElementById('filterGrade').value,
         faculty: document.getElementById('filterFaculty').value,
+        gender: document.getElementById('filterGender').value,
+        department: document.getElementById('filterDepartment').value,
         status: document.getElementById('filterStatus').value
     });
 
@@ -600,13 +788,9 @@ async function loadMembers() {
 
 async function loadPendingCount() {
     try {
+        return;
         const res = await fetch('/index.php?route=api/members/pending/count');
         const data = await res.json();
-
-        if (data.success && data.data.count > 0) {
-            document.getElementById('pendingCount').textContent = data.data.count;
-            document.getElementById('pendingBadge').style.display = 'inline';
-        }
     } catch (err) {
         console.error(err);
     }
@@ -731,10 +915,93 @@ function resetFilters() {
     document.getElementById('searchQuery').value = '';
     document.getElementById('filterGrade').value = '';
     document.getElementById('filterFaculty').value = '';
+    document.getElementById('filterGender').value = '';
+    document.getElementById('filterDepartment').value = '';
     document.getElementById('filterStatus').value = '';
     currentPage = 1;
     loadMembers();
 }
+
+function exportExcel() {
+    // 年度セレクトの選択肢をExcelモーダル側にコピー
+    const srcSelect = document.getElementById('academicYearSelect');
+    const destSelect = document.getElementById('exportYear');
+    destSelect.innerHTML = '<option value="">すべての年度</option>';
+    Array.from(srcSelect.options).forEach(opt => {
+        const o = document.createElement('option');
+        o.value = opt.value;
+        o.textContent = opt.textContent;
+        if (opt.selected) o.selected = true;
+        destSelect.appendChild(o);
+    });
+    exportModal.show();
+}
+
+function exportCheckAll(checked) {
+    document.querySelectorAll('.export-col').forEach(cb => cb.checked = checked);
+}
+
+function doExportExcel() {
+    const params = new URLSearchParams();
+    const val = (id) => document.getElementById(id).value;
+    if (val('exportYear'))       params.append('academic_year', val('exportYear'));
+    if (val('exportStatus'))     params.append('status',        val('exportStatus'));
+    if (val('exportGrade'))      params.append('grade',         val('exportGrade'));
+    if (val('exportGender'))     params.append('gender',        val('exportGender'));
+    if (val('exportFaculty'))    params.append('faculty',       val('exportFaculty'));
+    if (val('exportDepartment')) params.append('department',    val('exportDepartment'));
+
+    // リストの現在の順番でチェック済み項目を取得
+    const cols = Array.from(document.querySelectorAll('#exportColumnList .export-col:checked')).map(cb => cb.value);
+    if (cols.length === 0) { alert('出力する項目を1つ以上選択してください'); return; }
+    params.append('columns', cols.join(','));
+
+    exportModal.hide();
+    window.location.href = `/index.php?route=api/members/export&${params}`;
+}
+
+// ドラッグ&ドロップで列の順番を並び替え
+(function () {
+    let draggingEl = null;
+
+    document.addEventListener('dragstart', e => {
+        const item = e.target.closest('.export-col-item');
+        if (!item) return;
+        draggingEl = item;
+        setTimeout(() => item.classList.add('dragging'), 0);
+    });
+
+    document.addEventListener('dragend', e => {
+        const item = e.target.closest('.export-col-item');
+        if (!item) return;
+        item.classList.remove('dragging');
+        document.querySelectorAll('.export-col-item').forEach(el => el.classList.remove('drag-over'));
+        draggingEl = null;
+    });
+
+    document.addEventListener('dragover', e => {
+        e.preventDefault();
+        const item = e.target.closest('.export-col-item');
+        if (!item || item === draggingEl) return;
+        document.querySelectorAll('.export-col-item').forEach(el => el.classList.remove('drag-over'));
+        item.classList.add('drag-over');
+
+        const list = item.parentNode;
+        const items = Array.from(list.children);
+        const draggingIdx = items.indexOf(draggingEl);
+        const targetIdx   = items.indexOf(item);
+        if (draggingIdx < targetIdx) {
+            list.insertBefore(draggingEl, item.nextSibling);
+        } else {
+            list.insertBefore(draggingEl, item);
+        }
+    });
+
+    document.addEventListener('drop', e => {
+        e.preventDefault();
+        document.querySelectorAll('.export-col-item').forEach(el => el.classList.remove('drag-over'));
+    });
+})();
 
 function showCreateModal() {
     document.getElementById('memberModalTitle').textContent = '会員を追加';

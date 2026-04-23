@@ -91,17 +91,12 @@ async function loadHpContent() {
             }
         }
 
-        // クイックニュース更新
-        if (settings.quick_news) {
-            const qn = typeof settings.quick_news === 'string'
-                ? JSON.parse(settings.quick_news)
-                : settings.quick_news;
-            const quickList = document.querySelector('.quick-nav-inner ul');
-            if (quickList && qn.length > 0) {
-                quickList.innerHTML = qn.map(item =>
-                    `<li><a href="#${item.anchor || ''}">${item.text}</a></li>`
-                ).join('');
-            }
+        // クイックニュース：最新2件を自動表示
+        const quickList = document.querySelector('.quick-nav-inner ul');
+        if (quickList && news && news.length > 0) {
+            quickList.innerHTML = news.slice(0, 2).map(item =>
+                `<li><a href="#${escHtml(item.anchor_id || 'news-' + item.id)}">${escHtml(item.news_date)} - ${escHtml(item.title)}</a></li>`
+            ).join('');
         }
 
         // ニュースカード更新（空でも呼んで静的HTMLをクリア）

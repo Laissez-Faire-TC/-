@@ -312,6 +312,123 @@ class MemberController
     }
 
     /**
+     * 会員名簿Excel出力
+     */
+    public function exportExcel(array $params): void
+    {
+        $filters = [];
+        $search = Request::get('search', '');
+        if (!empty($search)) $filters['search'] = $search;
+
+        $grade = Request::get('grade');
+        if ($grade !== null && $grade !== '') $filters['grade'] = $grade;
+
+        $faculty = Request::get('faculty');
+        if ($faculty !== null && $faculty !== '') $filters['faculty'] = $faculty;
+
+        $gender = Request::get('gender');
+        if ($gender !== null && $gender !== '') $filters['gender'] = $gender;
+
+        $status = Request::get('status');
+        if ($status !== null && $status !== '') $filters['status'] = $status;
+
+        $academicYear = Request::get('academic_year');
+        if ($academicYear !== null && $academicYear !== '') $filters['academic_year'] = (int)$academicYear;
+
+        $department = Request::get('department');
+        if ($department !== null && $department !== '') $filters['department'] = $department;
+
+        $allColumns = [
+            'name_kanji'             => '氏名（漢字）',
+            'name_kana'              => '氏名（カナ）',
+            'gender'                 => '性別',
+            'grade'                  => '学年',
+            'faculty'                => '学部',
+            'department'             => '学科',
+            'student_id'             => '学籍番号',
+            'phone'                  => '電話番号',
+            'email'                  => 'メールアドレス',
+            'line_name'              => 'LINE名',
+            'status'                 => 'ステータス',
+            'enrollment_year'        => '入学年度',
+            'academic_year'          => '年度',
+            'birthdate'              => '生年月日',
+            'allergy'                => 'アレルギー',
+            'emergency_contact'      => '緊急連絡先',
+            'address'                => '住所',
+            'sns_allowed'            => 'SNS投稿可否',
+            'sports_registration_no' => '都営登録番号',
+        ];
+
+        $requestedCols = Request::get('columns');
+        if ($requestedCols) {
+            $keys = explode(',', $requestedCols);
+            $columns = [];
+            foreach ($keys as $k) {
+                if (isset($allColumns[$k])) $columns[$k] = $allColumns[$k];
+            }
+        } else {
+            $columns = $allColumns;
+        }
+
+        try {
+            $members = $this->model->search($filters, 10000, 0);
+
+            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('会員名簿');
+
+            $statusLabels = ['active' => '現役', 'pending' => '承認待ち', 'ob_og' => 'OB/OG', 'withdrawn' => '退会'];
+            $genderLabels = ['male' => '男性', 'female' => '女性'];
+
+            $colKeys = array_keys($columns);
+            foreach ($colKeys as $colIdx => $key) {
+                $cell = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIdx + 1) . '1';
+                $sheet->setCellValue($cell, $columns[$key]);
+                $sheet->getStyle($cell)->getFont()->setBold(true);
+                $sheet->getStyle($cell)->getFill()
+                    ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+                    ->getStartColor()->setRGB('4472C4');
+                $sheet->getStyle($cell)->getFont()->getColor()->setRGB('FFFFFF');
+            }
+
+            foreach ($members as $rowIdx => $m) {
+                $row = $rowIdx + 2;
+                foreach ($colKeys as $colIdx => $key) {
+                    $cellAddr = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIdx + 1) . $row;
+                    $val = match ($key) {
+                        'gender'      => $genderLabels[$m['gender']] ?? $m['gender'],
+                        'status'      => $statusLabels[$m['status']] ?? $m['status'],
+                        'sns_allowed' => ($m['sns_allowed'] ? '可' : '不可'),
+                        default       => $m[$key] ?? '',
+                    };
+                    $sheet->setCellValueExplicit($cellAddr, (string)($val ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                }
+            }
+
+            foreach (range(1, count($columns)) as $col) {
+                $sheet->getColumnDimensionByColumn($col)->setAutoSize(true);
+            }
+
+            $sheet->setAutoFilter('A1:' . \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($columns)) . '1');
+
+            $yearLabel = isset($filters['academic_year']) ? $filters['academic_year'] . '年度_' : '';
+            $filename = '会員名簿_' . $yearLabel . date('Ymd') . '.xlsx';
+
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment; filename*=UTF-8\'\'' . rawurlencode($filename));
+            header('Cache-Control: max-age=0');
+
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            $writer->save('php://output');
+            exit;
+
+        } catch (Exception $e) {
+            Response::error('Excel出力に失敗しました: ' . $e->getMessage(), 500, 'EXPORT_ERROR');
+        }
+    }
+
+    /**
      * 学籍番号解析API
      *
      * 学籍番号から入学年度・学部などの情報を解析

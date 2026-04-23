@@ -145,6 +145,7 @@ $router->get('/api/members', 'MemberController@index');
 $router->get('/api/members/pending', 'MemberController@pending');
 $router->get('/api/members/pending/count', 'MemberController@pendingCount');
 $router->get('/api/members/parse-student-id', 'EnrollmentController@parseStudentId');
+$router->get('/api/members/export', 'MemberController@exportExcel');
 $router->post('/api/members', 'MemberController@store');
 $router->post('/api/members/import', 'MemberController@import');
 // パラメータ付きルートは後ろに配置
