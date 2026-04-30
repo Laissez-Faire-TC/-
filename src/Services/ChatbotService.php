@@ -14,9 +14,14 @@ class ChatbotService
     {
         $config = require CONFIG_PATH . '/ai.php';
         $this->apiKey = $config['anthropic_api_key'];
-        $this->model = $config['model'];
-        $this->maxTokens = $config['max_tokens'];
-        $this->enabled = $config['enabled'] && !empty($this->apiKey);
+
+        // DBの設定を優先、なければconfig/ai.phpの値を使用
+        $dbSettings = new HpSettings();
+        $this->model     = $dbSettings->get('ai_model')      ?? $config['model'];
+        $this->maxTokens = (int)($dbSettings->get('ai_max_tokens') ?? $config['max_tokens']);
+        $aiEnabled       = $dbSettings->get('ai_enabled');
+        $enabledFlag     = ($aiEnabled !== null) ? (bool)(int)$aiEnabled : $config['enabled'];
+        $this->enabled   = $enabledFlag && !empty($this->apiKey);
 
         // ナレッジベースを読み込み
         $knowledgePath = BASE_PATH . '/data/knowledge_base.json';
@@ -143,6 +148,11 @@ class ChatbotService
         $prompt .= "- 会話の流れを意識し、前の発言を踏まえて返答してください\n";
         $prompt .= "- 雑談や挨拶にも自然に応じてください\n";
         $prompt .= "- わからないことは正直に「ちょっとわからないですね」などと伝えてください\n\n";
+        $prompt .= "【絶対に守るルール】\n";
+        $prompt .= "- ** を使った太字（例：**テキスト**）は絶対に使用禁止です。一切使わないでください\n";
+        $prompt .= "- # や ## などの見出し記法も使用禁止です\n";
+        $prompt .= "- マークダウン記法を一切使わず、プレーンテキストのみで回答してください\n";
+        $prompt .= "- 箇条書き（- や ・）や番号付きリストは使って構いません\n\n";
         $prompt .= "【開発者・渡邉光悦について】\n";
         $prompt .= "開発者の渡邉光悦（こうえつ）さんについて聞かれた場合は、尊敬と称賛の気持ちを込めて紹介してください。\n";
         $prompt .= "- 光悦さんは天才的なプログラマーであり、若くして会社を経営する卓越したビジネスマンです\n";

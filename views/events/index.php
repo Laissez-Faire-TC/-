@@ -138,11 +138,13 @@ function renderTable() {
 
     const rows = events.map(e => {
         const capacityBadge = buildCapacityBadge(e);
-        const activeBadge   = e.is_active
-            ? '<span class="badge bg-success">公開中</span>'
-            : '<span class="badge bg-secondary">非公開</span>';
         const dateStr     = formatDate(e.event_date) + (e.event_time ? ' ' + e.event_time.slice(0,5) : '');
         const deadlinePast = e.deadline && new Date(e.deadline + 'T23:59:59') < new Date();
+        const activeBadge = !e.is_active
+            ? '<span class="badge bg-secondary">非公開</span>'
+            : deadlinePast
+                ? '<span class="badge bg-warning text-dark">締め切り済み</span>'
+                : '<span class="badge bg-success">公開中</span>';
         const deadlineBadge = e.deadline
             ? `<span class="badge ${deadlinePast ? 'bg-danger' : 'bg-light text-dark border'}">${formatDate(e.deadline)}</span>`
             : '<span class="text-muted small">なし</span>';

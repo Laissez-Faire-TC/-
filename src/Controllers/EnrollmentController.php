@@ -75,12 +75,21 @@ class EnrollmentController
                 'allergy' => Request::get('allergy'),
                 'sns_allowed' => Request::get('sns_allowed', 0),
                 'sports_registration_no' => Request::get('sports_registration_no'),
+                'sports_registration_shared' => Request::get('sports_registration_shared', 0),
             ];
 
             $errors = $this->validate($data);
             if (!empty($errors)) {
                 Response::json(['success' => false, 'errors' => $errors]);
                 return;
+            }
+
+            // 氏名のスペースを正規化（確認画面にも正規化済みの名前を表示するため）
+            if (!empty($data['name_kanji'])) {
+                $data['name_kanji'] = Member::normalizeJapaneseName($data['name_kanji']);
+            }
+            if (!empty($data['name_kana'])) {
+                $data['name_kana'] = Member::normalizeJapaneseName($data['name_kana']);
             }
 
             $_SESSION['enrollment_data'] = $data;

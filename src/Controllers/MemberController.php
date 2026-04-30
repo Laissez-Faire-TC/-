@@ -40,27 +40,37 @@ class MemberController
     {
         // 検索・フィルタパラメータ
         $search = Request::get('search', '');
-        $status = Request::get('status');
-        $grade = Request::get('grade');
-        $faculty = Request::get('faculty');
         $academicYear = Request::get('academic_year');
         $page = (int)Request::get('page', 1);
         $perPage = (int)Request::get('per_page', 20);
+
+        // 複数選択可能フィルタ（配列 or 文字列を正規化）
+        $normalizeArray = function($val): array {
+            if ($val === null) return [];
+            $arr = is_array($val) ? $val : [$val];
+            return array_values(array_filter($arr, fn($v) => $v !== ''));
+        };
 
         // フィルタ条件を構築
         $filters = [];
         if (!empty($search)) {
             $filters['search'] = $search;
         }
-        if ($status !== null && $status !== '') {
-            $filters['status'] = $status;
-        }
-        if ($grade !== null && $grade !== '') {
-            $filters['grade'] = $grade;
-        }
-        if ($faculty !== null && $faculty !== '') {
-            $filters['faculty'] = $faculty;
-        }
+        $status = $normalizeArray(Request::get('status'));
+        if (!empty($status)) $filters['status'] = $status;
+
+        $grade = $normalizeArray(Request::get('grade'));
+        if (!empty($grade)) $filters['grade'] = $grade;
+
+        $faculty = $normalizeArray(Request::get('faculty'));
+        if (!empty($faculty)) $filters['faculty'] = $faculty;
+
+        $gender = $normalizeArray(Request::get('gender'));
+        if (!empty($gender)) $filters['gender'] = $gender;
+
+        $department = $normalizeArray(Request::get('department'));
+        if (!empty($department)) $filters['department'] = $department;
+
         if ($academicYear !== null && $academicYear !== '') {
             $filters['academic_year'] = (int)$academicYear;
         }
@@ -320,23 +330,29 @@ class MemberController
         $search = Request::get('search', '');
         if (!empty($search)) $filters['search'] = $search;
 
-        $grade = Request::get('grade');
-        if ($grade !== null && $grade !== '') $filters['grade'] = $grade;
+        $normalizeArray = function($val): array {
+            if ($val === null) return [];
+            $arr = is_array($val) ? $val : [$val];
+            return array_values(array_filter($arr, fn($v) => $v !== ''));
+        };
 
-        $faculty = Request::get('faculty');
-        if ($faculty !== null && $faculty !== '') $filters['faculty'] = $faculty;
+        $grade = $normalizeArray(Request::get('grade'));
+        if (!empty($grade)) $filters['grade'] = $grade;
 
-        $gender = Request::get('gender');
-        if ($gender !== null && $gender !== '') $filters['gender'] = $gender;
+        $faculty = $normalizeArray(Request::get('faculty'));
+        if (!empty($faculty)) $filters['faculty'] = $faculty;
 
-        $status = Request::get('status');
-        if ($status !== null && $status !== '') $filters['status'] = $status;
+        $gender = $normalizeArray(Request::get('gender'));
+        if (!empty($gender)) $filters['gender'] = $gender;
+
+        $status = $normalizeArray(Request::get('status'));
+        if (!empty($status)) $filters['status'] = $status;
 
         $academicYear = Request::get('academic_year');
         if ($academicYear !== null && $academicYear !== '') $filters['academic_year'] = (int)$academicYear;
 
-        $department = Request::get('department');
-        if ($department !== null && $department !== '') $filters['department'] = $department;
+        $department = $normalizeArray(Request::get('department'));
+        if (!empty($department)) $filters['department'] = $department;
 
         $allColumns = [
             'name_kanji'             => '氏名（漢字）',

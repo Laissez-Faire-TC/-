@@ -84,76 +84,6 @@ class RenewalController
     }
 
     /**
-     * 会員検索画面表示
-     */
-    public function search(array $params): void
-    {
-        $yearInfo = $this->getYearInfo();
-
-        if (!$yearInfo) {
-            $this->render('renew/search', [
-                'currentYear'  => null,
-                'previousYear' => null,
-            ]);
-            return;
-        }
-
-        $this->render('renew/search', [
-            'currentYear'  => ['year' => $yearInfo['year']],
-            'previousYear' => $yearInfo['previousYear'],
-        ]);
-    }
-
-    /**
-     * 会員検索API
-     */
-    public function searchMembers(array $params): void
-    {
-        $name = Request::get('name', '');
-
-        if (empty($name)) {
-            Response::json([
-                'success' => false,
-                'error' => '名前を入力してください'
-            ]);
-            return;
-        }
-
-        $yearInfo = $this->getYearInfo();
-
-        if (!$yearInfo) {
-            Response::json([
-                'success' => false,
-                'error' => '現在、入会受付を行っていません'
-            ]);
-            return;
-        }
-
-        $nextYear     = $yearInfo['year'];
-        $previousYear = $yearInfo['previousYear'];
-
-        // 前年度の名簿から検索
-        $memberModel = new Member();
-        $members = $memberModel->searchPreviousYear($name, $previousYear);
-
-        // 既に新年度に登録済みかチェック
-        foreach ($members as &$member) {
-            $existing = $memberModel->findByStudentIdAndYear(
-                $member['student_id'],
-                $nextYear
-            );
-            $member['already_renewed'] = ($existing !== null);
-        }
-
-        Response::json([
-            'success'      => true,
-            'members'      => $members,
-            'currentYear'  => $nextYear,
-            'previousYear' => $previousYear,
-        ]);
-    }
-
-    /**
      * 情報確認・編集画面
      */
     public function confirm(array $params): void
@@ -220,7 +150,7 @@ class RenewalController
         $updatedFields = [
             'name_kanji', 'name_kana', 'gender', 'grade', 'faculty', 'department',
             'student_id', 'phone', 'address', 'emergency_contact', 'birthdate',
-            'allergy', 'line_name', 'sns_allowed', 'sports_registration_no', 'email'
+            'allergy', 'line_name', 'sns_allowed', 'sports_registration_no', 'sports_registration_shared', 'email'
         ];
 
         foreach ($updatedFields as $field) {
@@ -305,6 +235,7 @@ class RenewalController
                 'line_name' => $member['line_name'],
                 'sns_allowed' => $member['sns_allowed'] ?? 1,
                 'sports_registration_no' => $member['sports_registration_no'] ?? null,
+                'sports_registration_shared' => $member['sports_registration_shared'] ?? 0,
                 'email' => $member['email'] ?? null,
                 'status' => Member::STATUS_ACTIVE,  // 継続入会なので即座にactive
                 'department_not_set' => (!empty($member['department']) ? 0 : ($member['department_not_set'] ?? 0)),
@@ -316,9 +247,9 @@ class RenewalController
             $sql = "INSERT INTO members (
                 name_kanji, name_kana, gender, grade, faculty, department,
                 student_id, phone, address, emergency_contact, birthdate,
-                allergy, line_name, sns_allowed, sports_registration_no, email,
+                allergy, line_name, sns_allowed, sports_registration_no, sports_registration_shared, email,
                 status, department_not_set, enrollment_year, academic_year
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
             $db = Database::getInstance();
             $newMemberId = $db->insert($sql, [
@@ -337,6 +268,7 @@ class RenewalController
                 $newMemberData['line_name'],
                 $newMemberData['sns_allowed'],
                 $newMemberData['sports_registration_no'],
+                $newMemberData['sports_registration_shared'],
                 $newMemberData['email'],
                 $newMemberData['status'],
                 $newMemberData['department_not_set'],

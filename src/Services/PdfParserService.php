@@ -64,6 +64,8 @@ class PdfParserService
 
         // 種類に応じたパース処理
         switch ($contractType) {
+            case 'mainichi_haichi':
+                return $this->parseMainichiHaichi($text);
             case 'mainichi_reservation':
                 return $this->parseMainichiReservation($text);
             case 'mainichi_bus':
@@ -360,6 +362,11 @@ EOT;
             return 'cosmo_reservation';
         }
 
+        // 毎日コムネット 手配申込書（宿泊手配書）
+        if (strpos($text, '手配申込書') !== false || strpos($text, '手 配 申 込 書') !== false) {
+            return 'mainichi_haichi';
+        }
+
         // 毎日コムネット
         if (strpos($text, '御予約確認書') !== false) {
             return 'mainichi_reservation';
@@ -542,6 +549,109 @@ EOT;
             $data['bus_fee_round_trip'] = (int)str_replace(',', '', $matches[1]);
         } elseif (preg_match('/合計.*?[¥￥]?\s*([0-9,]+)\s*円?/u', $text, $matches)) {
             $data['bus_fee_round_trip'] = (int)str_replace(',', '', $matches[1]);
+        }
+
+        return $data;
+    }
+
+    /**
+     * 毎日コムネット手配申込書をパース
+     * 宿泊明細テーブル・私有施設利用テーブルから情報を抽出する。
+     * 私有施設テーブルは「料金(税抜) 料金(税込)」の2列構成のため税込（2番目）を採用。
+     *
+     * @param string $text PDFテキスト
+     * @return array
+     */
+    private function parseMainichiHaichi(string $text): array
+    {
+        $data = [
+            'type'                  => 'mainichi_haichi',
+            'lodging_fee_per_night' => null,
+            'hot_spring_tax'        => null,
+            'court_fee_per_unit'    => null,
+            'banquet_fee_per_person'=> null,
+            'bus_fee_round_trip'    => null,
+            'facility_name'         => null,
+            'dates'                 => null,
+        ];
+
+        // --- 施設名 ---
+        // 「施設名」ラベルの直後の単語を優先（例：清風荘アネックス）
+        if (preg_match('/施設名\s+([^\s\n（(]+)/u', $text, $m)) {
+            $data['facility_name'] = trim($m[1]);
+        } else {
+            $data['facility_name'] = $this->extractFacilityName($text);
+        }
+
+        // --- 旅行期間 ---
+        // 「旅行期間 2025年9月11日(木) ～2025年9月14日(日)」形式
+        if (preg_match(
+            '/旅行期間[^\d]*(\d{4})年(\d{1,2})月(\d{1,2})日[^〜～~\d]*[〜～~][^\d]*(\d{4})年(\d{1,2})月(\d{1,2})日/u',
+            $text, $m
+        )) {
+            $data['dates'] = [
+                'start' => sprintf('%04d-%02d-%02d', $m[1], $m[2], $m[3]),
+                'end'   => sprintf('%04d-%02d-%02d', $m[4], $m[5], $m[6]),
+            ];
+        } elseif (preg_match(
+            '/旅行期間[^\d]*(\d{4})年(\d{1,2})月(\d{1,2})日[^〜～~\d]*[〜～~][^\d]*(\d{1,2})月(\d{1,2})日/u',
+            $text, $m
+        )) {
+            $data['dates'] = [
+                'start' => sprintf('%04d-%02d-%02d', $m[1], $m[2], $m[3]),
+                'end'   => sprintf('%04d-%02d-%02d', $m[1], $m[4], $m[5]),
+            ];
+        } elseif (preg_match(
+            '/(\d{4})年(\d{1,2})月(\d{1,2})日[^〜～~\d]*[〜～~][^\d]*(\d{1,2})月(\d{1,2})日/u',
+            $text, $m
+        )) {
+            $data['dates'] = [
+                'start' => sprintf('%04d-%02d-%02d', $m[1], $m[2], $m[3]),
+                'end'   => sprintf('%04d-%02d-%02d', $m[1], $m[4], $m[5]),
+            ];
+        }
+
+        // --- 宿泊費（1泊3食 単価 税込）---
+        // 行形式: "1泊３食  ¥7,810  300  ¥2,343,000"
+        // 最初の X,XXX 形式（カンマ付き4桁）が単価、次の大きい数が合計なので最初を採用
+        if (preg_match('/1泊.食[^0-9]*([0-9]{1,3},[0-9]{3})/u', $text, $m)) {
+            $data['lodging_fee_per_night'] = (int)str_replace(',', '', $m[1]);
+        } elseif (preg_match('/1泊.食[^0-9]*([1-9][0-9]{3,5})\b/u', $text, $m)) {
+            $fee = (int)$m[1];
+            if ($fee >= 1000 && $fee <= 99999) {
+                $data['lodging_fee_per_night'] = $fee;
+            }
+        }
+
+        // --- テニスコート料金（半日1面 税込）---
+        // 表の列: 料金(税抜) | 料金(税込) → 行内の2番目の金額を採用
+        // 形式: "テニスコート（クレー）... \3,000 \3,300"
+        if (preg_match(
+            '/テニスコート[^\n]*([0-9]{1,3},[0-9]{3}|[0-9]{4,})[^\n0-9,]+([0-9]{1,3},[0-9]{3}|[0-9]{4,})/u',
+            $text, $m
+        )) {
+            $data['court_fee_per_unit'] = (int)str_replace(',', '', $m[2]);
+        } elseif (preg_match('/テニスコート[^\n]*([0-9,]+)/u', $text, $m)) {
+            $data['court_fee_per_unit'] = (int)str_replace(',', '', $m[1]);
+        }
+
+        // --- 宴会場料金（1人1晩 税込）---
+        // 形式: "宴会場 ... \500 \550" → 行内の2番目の数値（3桁以上）を採用
+        if (preg_match('/宴会場[^\n]*?([0-9]{3,})[^\n0-9]+([0-9]{3,})/u', $text, $m)) {
+            $data['banquet_fee_per_person'] = (int)str_replace(',', '', $m[2]);
+        } elseif (preg_match('/宴会場[^\n]*?([0-9]+)/u', $text, $m)) {
+            $data['banquet_fee_per_person'] = (int)str_replace(',', '', $m[1]);
+        }
+
+        // --- 入湯税 ---
+        // 「入湯税 ： 無し」→ null、金額あり → 抽出
+        if (!preg_match('/入湯税[^\n]*無し/u', $text)) {
+            if (preg_match('/入湯税[^\n]*([0-9]+)/u', $text, $m)) {
+                $val = (int)$m[1];
+                if ($val > 0) {
+                    $data['hot_spring_tax'] = $val;
+                }
+            }
         }
 
         return $data;

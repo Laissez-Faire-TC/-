@@ -1887,4 +1887,340 @@ class ExportService
         $writer->save('php://output');
         exit;
     }
+
+    /**
+     * アレルギーリストPDF出力
+     */
+    public function generateAllergyListPdf(int $campId): void
+    {
+        $campModel = new Camp();
+        $camp = $campModel->find($campId);
+        if (!$camp) {
+            throw new \Exception('合宿が見つかりません');
+        }
+
+        $participantModel = new Participant();
+        $participants = $participantModel->getByCampId($campId);
+
+        // アレルギーあり参加者のみ抽出
+        $allergyParticipants = array_filter($participants, function($p) {
+            return !empty($p['allergy']) && trim($p['allergy']) !== '';
+        });
+
+        $campName = htmlspecialchars($camp['name']);
+        $printDate = date('Y年m月d日');
+        $count = count($allergyParticipants);
+
+        $html = '<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>' . $campName . ' - アレルギーリスト</title>
+    <style>
+        body { font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif; font-size: 12px; margin: 20px; }
+        h1 { font-size: 18px; text-align: center; margin-bottom: 5px; }
+        .meta { text-align: center; color: #555; font-size: 11px; margin-bottom: 20px; }
+        .summary { background: #fff8e1; border: 1px solid #f0c060; padding: 10px 15px; margin-bottom: 20px; border-radius: 4px; }
+        .summary p { margin: 0; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #aaa; padding: 8px 10px; text-align: left; font-size: 11px; vertical-align: top; }
+        th { background: #ffe082; font-weight: bold; }
+        tr:nth-child(even) { background: #fffde7; }
+        .no-allergy { text-align: center; color: #888; padding: 30px; }
+        .no-print { margin-bottom: 15px; }
+        @media print {
+            .no-print { display: none; }
+            body { margin: 10px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print">
+        <button onclick="window.print()">印刷</button>
+        <button onclick="window.close()">閉じる</button>
+    </div>
+
+    <h1>' . $campName . ' アレルギーリスト</h1>
+    <p class="meta">出力日: ' . $printDate . '</p>
+';
+
+        if ($count === 0) {
+            $html .= '<p class="no-allergy">アレルギーのある参加者はいません。</p>';
+        } else {
+            $html .= '
+    <div class="summary">
+        <p>アレルギーのある参加者: <strong>' . $count . '名</strong></p>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th style="width:30px;">No.</th>
+                <th style="width:120px;">名前</th>
+                <th style="width:60px;">学年</th>
+                <th>アレルギー内容</th>
+            </tr>
+        </thead>
+        <tbody>';
+
+            $i = 1;
+            foreach ($allergyParticipants as $p) {
+                $gradeLabel = $this->getGradeLabel(
+                    $p['grade'] !== null ? (int)$p['grade'] : null,
+                    $p['gender']
+                );
+                $html .= '
+            <tr>
+                <td>' . $i++ . '</td>
+                <td>' . htmlspecialchars($p['name']) . '</td>
+                <td>' . htmlspecialchars($gradeLabel) . '</td>
+                <td>' . htmlspecialchars($p['allergy']) . '</td>
+            </tr>';
+            }
+
+            $html .= '
+        </tbody>
+    </table>';
+        }
+
+        $html .= '
+</body>
+</html>';
+
+        header('Content-Type: text/html; charset=utf-8');
+        header('Content-Disposition: inline; filename="allergy_list_' . $campId . '.html"');
+        echo $html;
+        exit;
+    }
+
+    /**
+     * 合宿・遠征届 参加者名簿 Excel出力
+     * 早稲田大学学生補償制度対応フォーマット
+     */
+    public function generateActivityMeibo(int $campId): void
+    {
+        $campModel = new Camp();
+        $camp = $campModel->find($campId);
+        if (!$camp) {
+            throw new \Exception('合宿が見つかりません');
+        }
+
+        // 参加者データを会員情報と合わせて取得（申込経由の参加者は会員情報をJOIN）
+        $db = Database::getInstance();
+        $participants = $db->fetchAll(
+            "SELECT p.*,
+                    COALESCE(ca.edited_name_kanji, m.name_kanji, p.name) AS display_name,
+                    COALESCE(ca.edited_faculty, m.faculty)               AS display_faculty,
+                    COALESCE(ca.edited_department, m.department)         AS display_department,
+                    m.student_id
+             FROM participants p
+             LEFT JOIN camp_applications ca ON ca.participant_id = p.id
+                                           AND ca.camp_id = ?
+                                           AND ca.status != 'cancelled'
+             LEFT JOIN members m ON ca.member_id = m.id
+             WHERE p.camp_id = ?
+             ORDER BY p.grade, p.name",
+            [$campId, $campId]
+        );
+
+        $ROWS_PER_SHEET = 25;
+        $totalParticipants = count($participants);
+        $sheetCount = max(1, (int)ceil($totalParticipants / $ROWS_PER_SHEET));
+
+        $spreadsheet = new Spreadsheet();
+
+        for ($sheetIndex = 0; $sheetIndex < $sheetCount; $sheetIndex++) {
+            if ($sheetIndex === 0) {
+                $sheet = $spreadsheet->getActiveSheet();
+            } else {
+                $sheet = $spreadsheet->createSheet($sheetIndex);
+            }
+            $pageNum = $sheetIndex + 1;
+            $sheet->setTitle('名簿' . $pageNum);
+
+            $sheetParticipants = array_slice($participants, $sheetIndex * $ROWS_PER_SHEET, $ROWS_PER_SHEET);
+            $this->buildMeiboSheet($sheet, $camp, $sheetParticipants, $sheetIndex);
+        }
+
+        $spreadsheet->setActiveSheetIndex(0);
+
+        $campName = preg_replace('/[\\\\\/:\*\?"<>\|]/', '_', $camp['name']);
+        $filename  = '参加者名簿_' . $campName . '.xlsx';
+
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="' . rawurlencode($filename) . '"');
+        header('Cache-Control: max-age=0');
+
+        $writer = new Xlsx($spreadsheet);
+        $writer->save('php://output');
+        exit;
+    }
+
+    /**
+     * 名簿シート1枚分を構築（25行/シート）
+     */
+    private function buildMeiboSheet(
+        \PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $sheet,
+        array $camp,
+        array $participants,
+        int   $sheetIndex
+    ): void {
+        // --- 列幅 ---
+        $sheet->getColumnDimension('A')->setWidth(5);    // 番号
+        $sheet->getColumnDimension('B')->setWidth(22);   // 学部
+        $sheet->getColumnDimension('C')->setWidth(9);    // 学年
+        $sheet->getColumnDimension('D')->setWidth(14);   // 学籍番号
+        $sheet->getColumnDimension('E')->setWidth(22);   // 氏名
+        $sheet->getColumnDimension('F')->setWidth(22);   // 備考
+        $sheet->getColumnDimension('G')->setWidth(18);   // 所属サークル登録済
+
+        // --- タイトル ---
+        $row = 1;
+        $sheet->setCellValue('A' . $row, '【参加者名簿】');
+        $sheet->mergeCells('A' . $row . ':G' . $row);
+        $sheet->getStyle('A' . $row)->getFont()->setBold(true)->setSize(14);
+        $sheet->getStyle('A' . $row)->getAlignment()
+            ->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $sheet->getRowDimension($row)->setRowHeight(22);
+
+        // --- サブタイトル ---
+        $row = 2;
+        $sheet->setCellValue('A' . $row,
+            '※所属サークルの登録が完了していることを確認の上、チェックを入れてください。');
+        $sheet->mergeCells('A' . $row . ':G' . $row);
+        $sheet->getStyle('A' . $row)->getFont()->setSize(9);
+        $sheet->getRowDimension($row)->setRowHeight(14);
+
+        // --- 合宿名・期間 ---
+        $row = 3;
+        $startDate = new \DateTime($camp['start_date']);
+        $endDate   = new \DateTime($camp['end_date']);
+        $sheet->setCellValue('A' . $row, $camp['name']);
+        $sheet->mergeCells('A' . $row . ':D' . $row);
+        $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+
+        $dateStr = $startDate->format('Y年n月j日') . '〜' . $endDate->format('n月j日');
+        $sheet->setCellValue('E' . $row, $dateStr);
+        $sheet->mergeCells('E' . $row . ':G' . $row);
+        $sheet->getStyle('E' . $row)->getAlignment()
+            ->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+        $sheet->getRowDimension($row)->setRowHeight(16);
+
+        // --- ヘッダー行 ---
+        $row = 5;
+        $headerRow = $row;
+        $sheet->setCellValue('A' . $row, '');
+        $sheet->setCellValue('B' . $row, '学　　部');
+        $sheet->setCellValue('C' . $row, '学 年');
+        $sheet->setCellValue('D' . $row, '学 籍 番 号');
+        $sheet->setCellValue('E' . $row, '氏　　　名');
+        $sheet->setCellValue('F' . $row, '備　　　考');
+        $sheet->setCellValue('G' . $row, '所属サークル登録済');
+
+        $sheet->getStyle('A' . $row . ':G' . $row)->applyFromArray([
+            'font'      => ['bold' => true],
+            'alignment' => [
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+                'vertical'   => Alignment::VERTICAL_CENTER,
+            ],
+            'fill' => [
+                'fillType'   => Fill::FILL_SOLID,
+                'startColor' => ['rgb' => 'D9D9D9'],
+            ],
+        ]);
+        $sheet->getRowDimension($row)->setRowHeight(22);
+
+        // --- データ行（25行固定） ---
+        $dataStartRow = $headerRow + 1;
+        for ($i = 0; $i < 25; $i++) {
+            $row = $dataStartRow + $i;
+            $globalNum = ($sheetIndex * 25) + $i + 1;  // 全体通し番号
+
+            // 5行ごとに番号を右端に表示
+            if ($globalNum % 5 === 0) {
+                $sheet->setCellValue('A' . $row, $globalNum);
+                $sheet->getStyle('A' . $row)->getAlignment()
+                    ->setHorizontal(Alignment::HORIZONTAL_RIGHT)
+                    ->setVertical(Alignment::VERTICAL_CENTER);
+                $sheet->getStyle('A' . $row)->getFont()->setSize(8);
+            }
+
+            $participant = $participants[$i] ?? null;
+            if ($participant) {
+                $faculty   = $participant['display_faculty'] ?? '';
+                $studentId = $participant['student_id'] ?? '';
+
+                // 学籍番号から学年を推測（StudentIdParserService を利用）
+                $grade = '';
+                if (!empty($studentId)) {
+                    $parser = new StudentIdParserService();
+                    $parsed = $parser->parse($studentId);
+                    if ($parsed['is_valid'] && $parsed['enrollment_year'] !== null) {
+                        $gradeNum = $parser->calculateGrade($parsed['enrollment_year']);
+                        $grade = $gradeNum . '年';
+                    }
+                }
+                // 学籍番号から推測できない場合は保存済み学年にフォールバック
+                if ($grade === '') {
+                    $gradeNum = $participant['grade'];
+                    $grade    = ($gradeNum === null) ? '' : (($gradeNum === 0) ? 'OB/OG' : $gradeNum . '年');
+                }
+                $name     = $participant['display_name'] ?? $participant['name'];
+
+                $sheet->setCellValue('B' . $row, $faculty);
+                $sheet->setCellValue('C' . $row, $grade);
+                $sheet->setCellValue('D' . $row, $studentId);
+                $sheet->setCellValue('E' . $row, $name);
+                // F列（備考）・G列（チェックボックス）は空白のまま手書き
+
+                // 学年・番号は中央揃え
+                $sheet->getStyle('C' . $row)->getAlignment()
+                    ->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                $sheet->getStyle('D' . $row)->getAlignment()
+                    ->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            }
+
+            $sheet->getRowDimension($row)->setRowHeight(16);
+        }
+
+        // --- 表全体に枠線 ---
+        $tableEnd = $dataStartRow + 24;
+        $sheet->getStyle('A' . $headerRow . ':G' . $tableEnd)->getBorders()
+            ->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+
+        // ヘッダー下を太線
+        $sheet->getStyle('A' . $headerRow . ':G' . $headerRow)->getBorders()
+            ->getBottom()->setBorderStyle(Border::BORDER_MEDIUM);
+
+        // --- 注記 ---
+        $noteRow = $tableEnd + 2;
+        $note1 = '【重要】早稲田大学学生補償制度の適用にあたって、「合宿・遠征届」の参加者名簿に記入した氏名は、三役による「サークル会員名簿」の提出と、各サークル員による所属サークルの登録が完了している必要があります。それを満たさない学生が活動に参加する場合はサークル会員名簿を所定の期間内に追加で提出してください。';
+        $sheet->setCellValue('A' . $noteRow, $note1);
+        $sheet->mergeCells('A' . $noteRow . ':G' . $noteRow);
+        $sheet->getStyle('A' . $noteRow)->getAlignment()
+            ->setWrapText(true)
+            ->setHorizontal(Alignment::HORIZONTAL_LEFT);
+        $sheet->getStyle('A' . $noteRow)->getFont()->setSize(8);
+        $sheet->getRowDimension($noteRow)->setRowHeight(40);
+
+        $noteRow++;
+        $note2 = 'ただし、新入生をはじめ、サークルへの入会が未定の者が参加する活動の場合は、氏名の前に（新）と付けることでサークル員と区別できるようにしておいてください（その場合、「所属サークル登録済」欄に☑は不要です）。';
+        $sheet->setCellValue('A' . $noteRow, $note2);
+        $sheet->mergeCells('A' . $noteRow . ':G' . $noteRow);
+        $sheet->getStyle('A' . $noteRow)->getAlignment()
+            ->setWrapText(true)
+            ->setHorizontal(Alignment::HORIZONTAL_LEFT);
+        $sheet->getStyle('A' . $noteRow)->getFont()->setSize(8);
+        $sheet->getRowDimension($noteRow)->setRowHeight(30);
+
+        // --- ページ設定（印刷用）---
+        $sheet->getPageSetup()
+            ->setOrientation(\PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::ORIENTATION_PORTRAIT)
+            ->setPaperSize(\PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::PAPERSIZE_A4)
+            ->setFitToPage(true)
+            ->setFitToWidth(1)
+            ->setFitToHeight(0);
+        $sheet->getPageMargins()
+            ->setTop(0.75)->setBottom(0.75)
+            ->setLeft(0.7)->setRight(0.7);
+    }
 }

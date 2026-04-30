@@ -14,6 +14,15 @@ ob_start();
 
         <form id="scheduleForm" onsubmit="return handleSubmit(event)">
             <input type="hidden" name="member_id" value="<?= $member['id'] ?>">
+            <input type="hidden" name="info_edited" value="<?= (int)$infoEdited ?>">
+            <input type="hidden" name="edited_name_kanji" value="<?= htmlspecialchars($editedNameKanji ?? '') ?>">
+            <input type="hidden" name="edited_grade" value="<?= htmlspecialchars($editedGrade ?? '') ?>">
+            <input type="hidden" name="edited_gender" value="<?= htmlspecialchars($editedGender ?? '') ?>">
+            <input type="hidden" name="edited_faculty" value="<?= htmlspecialchars($editedFaculty ?? '') ?>">
+            <input type="hidden" name="edited_department" value="<?= htmlspecialchars($editedDepartment ?? '') ?>">
+            <input type="hidden" name="edited_address" value="<?= htmlspecialchars($editedAddress ?? '') ?>">
+            <input type="hidden" name="edited_allergy" value="<?= htmlspecialchars($editedAllergy ?? '') ?>">
+            <input type="hidden" name="edited_line_name" value="<?= htmlspecialchars($editedLineName ?? '') ?>">
 
             <!-- 参加パターン -->
             <div class="mb-4">

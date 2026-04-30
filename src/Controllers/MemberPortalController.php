@@ -75,6 +75,22 @@ class MemberPortalController
         $feeItemModel      = new MembershipFeeItem();
         $pendingFees       = $feeItemModel->getPendingByMemberId($memberId);
 
+        // 継続入会受付状態チェック
+        $ayModel       = new AcademicYear();
+        $renewOpenYear = $ayModel->getRenewOpenYear();
+        $renewOpen     = false;
+        $alreadyRenewed = false;
+        if ($renewOpenYear && (empty($renewOpenYear['renew_deadline']) || $renewOpenYear['renew_deadline'] >= date('Y-m-d'))) {
+            $renewOpen = true;
+            // ログイン中の会員が新年度に既に登録済みか確認
+            $memberModel = new Member();
+            $currentMember = $memberModel->find($memberId);
+            if ($currentMember) {
+                $existing = $memberModel->findByStudentIdAndYear($currentMember['student_id'], (int)$renewOpenYear['year']);
+                $alreadyRenewed = ($existing !== null);
+            }
+        }
+
         $this->render('member/home', [
             'activeCamps'        => $activeCamps,
             'activeEvents'       => $activeEvents,
@@ -82,6 +98,9 @@ class MemberPortalController
             'memberId'           => $memberId,
             'pendingCollections' => $pendingCollections,
             'pendingFees'        => $pendingFees,
+            'renewOpen'          => $renewOpen,
+            'alreadyRenewed'     => $alreadyRenewed,
+            'renewYear'          => $renewOpenYear['year'] ?? null,
         ]);
     }
 
@@ -127,7 +146,8 @@ class MemberPortalController
 
         if ($isFull) {
             if ($event['allow_waitlist']) {
-                $appModel->apply($eventId, $memberId, 'waitlisted');
+                $note = Request::get('note') ?? null;
+        $appModel->apply($eventId, $memberId, 'waitlisted', $note);
                 Response::success(['status' => 'waitlisted'], 'キャンセル待ちに登録しました');
             } else {
                 Response::error('定員に達しているため申し込みできません', 400, 'CAPACITY_FULL');
@@ -135,7 +155,8 @@ class MemberPortalController
             return;
         }
 
-        $appModel->apply($eventId, $memberId, 'submitted');
+        $note = Request::get('note') ?? null;
+        $appModel->apply($eventId, $memberId, 'submitted', $note);
         Response::success(['status' => 'submitted'], '申し込みが完了しました');
     }
 

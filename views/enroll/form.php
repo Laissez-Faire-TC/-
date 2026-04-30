@@ -33,6 +33,10 @@ $d = $savedData ?? [];
                            placeholder="例: 山田 太郎" value="<?= htmlspecialchars($d['name_kanji'] ?? '') ?>" required>
                     <small class="text-muted">全角スペース区切り</small>
                     <div class="invalid-feedback"></div>
+                    <div id="name_kanji_space_warning" class="alert alert-warning py-1 px-2 mt-1 mb-0 small" style="display:none;">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        姓と名の間にスペースを入れてください（例：山田　太郎）
+                    </div>
                 </div>
                 <div class="col-md-6">
                     <label for="name_kana" class="form-label">名前（カナ）<span class="text-danger">*</span></label>
@@ -40,6 +44,10 @@ $d = $savedData ?? [];
                            placeholder="例: ヤマダ タロウ" value="<?= htmlspecialchars($d['name_kana'] ?? '') ?>" required>
                     <small class="text-muted">全角スペース区切り</small>
                     <div class="invalid-feedback"></div>
+                    <div id="name_kana_space_warning" class="alert alert-warning py-1 px-2 mt-1 mb-0 small" style="display:none;">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        姓と名の間にスペースを入れてください（例：ヤマダ　タロウ）
+                    </div>
                 </div>
             </div>
 
@@ -123,6 +131,10 @@ $d = $savedData ?? [];
                            placeholder="例: 090-1234-5678" value="<?= htmlspecialchars($d['phone'] ?? '') ?>" required>
                     <small class="text-muted">ハイフンあり</small>
                     <div class="invalid-feedback"></div>
+                    <div id="phone_format_warning" class="alert alert-warning py-1 px-2 mt-1 mb-0 small" style="display:none;">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        ハイフン区切りで入力してください（例：090-1234-5678）
+                    </div>
                 </div>
                 <div class="col-md-6">
                     <label for="emergency_contact" class="form-label">緊急連絡先<span class="text-danger">*</span></label>
@@ -130,6 +142,10 @@ $d = $savedData ?? [];
                            placeholder="例: 03-1234-5678" value="<?= htmlspecialchars($d['emergency_contact'] ?? '') ?>" required>
                     <small class="text-muted">保護者など</small>
                     <div class="invalid-feedback"></div>
+                    <div id="emergency_contact_format_warning" class="alert alert-warning py-1 px-2 mt-1 mb-0 small" style="display:none;">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        ハイフン区切りで入力してください（例：03-1234-5678）
+                    </div>
                 </div>
             </div>
 
@@ -177,7 +193,25 @@ $d = $savedData ?? [];
                 <label for="sports_registration_no" class="form-label">コート予約番号</label>
                 <input type="text" class="form-control" id="sports_registration_no" name="sports_registration_no"
                        placeholder="8桁の番号" maxlength="8" value="<?= htmlspecialchars($d['sports_registration_no'] ?? '') ?>">
-                <small class="text-muted">東京都スポーツ施設予約システムの8桁の番号（任意）</small>
+                <small class="text-muted">東京都スポーツ施設予約システムの8桁の番号（ほかのサークルで使用する場合はチェックボックスにチェックを入れてください）</small>
+                <div class="mt-2">
+                    <a class="small" data-bs-toggle="collapse" href="#sports_reg_howto" role="button" aria-expanded="false">
+                        <i class="bi bi-question-circle"></i> 番号の取得方法
+                    </a>
+                    <div class="collapse mt-1" id="sports_reg_howto">
+                        <ol class="small text-muted mb-1">
+                            <li><a href="https://kouen.sports.metro.tokyo.lg.jp/web/" target="_blank" rel="noopener noreferrer">東京都公園・スポーツ施設予約システム <i class="bi bi-box-arrow-up-right"></i></a> にアクセス</li>
+                            <li>右上の「初めての方」をクリック</li>
+                            <li>誘導に従って登録し、取得完了</li>
+                        </ol>
+                    </div>
+                </div>
+                <div class="form-check mt-1">
+                    <input class="form-check-input" type="checkbox" id="sports_registration_shared" name="sports_registration_shared" value="1" <?= !empty($d['sports_registration_shared']) ? 'checked' : '' ?>>
+                    <label class="form-check-label" for="sports_registration_shared">
+                        ほかのサークルでも使用する
+                    </label>
+                </div>
             </div>
 
             <div class="d-grid gap-2 mt-4">
@@ -209,6 +243,33 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+// 氏名スペース警告チェック（漢字・カナ両方）
+function checkNameSpaceWarning() {
+    const kanjiInput = document.getElementById('name_kanji');
+    const kanaInput  = document.getElementById('name_kana');
+    const kanji = kanjiInput.value;
+    const kana  = kanaInput.value;
+
+    const kanjiHasSpace = /[ 　]/.test(kanji);
+    const kanaHasSpace  = /[ 　]/.test(kana);
+
+    // 漢字：文字があってスペースなし
+    const kanjiWarn = kanji.length > 0 && !kanjiHasSpace;
+    // カナ：文字があってスペースなし
+    const kanaWarn  = kana.length > 0 && !kanaHasSpace;
+
+    const kanjiWarningEl = document.getElementById('name_kanji_space_warning');
+    const kanaWarningEl  = document.getElementById('name_kana_space_warning');
+
+    kanjiWarningEl.style.display = kanjiWarn ? 'block' : 'none';
+    kanjiInput.classList.toggle('is-invalid', kanjiWarn);
+
+    kanaWarningEl.style.display = kanaWarn ? 'block' : 'none';
+    kanaInput.classList.toggle('is-invalid', kanaWarn);
+
+    return kanjiWarn || kanaWarn;
+}
+
 // 学籍番号の正規化（全角→半角、小文字→大文字）
 function normalizeStudentId(value) {
     return value
@@ -216,6 +277,55 @@ function normalizeStudentId(value) {
         .replace(/　/g, ' ')
         .toUpperCase();
 }
+
+// 氏名フィールドのスペース警告イベント
+document.getElementById('name_kanji').addEventListener('blur',  checkNameSpaceWarning);
+document.getElementById('name_kana').addEventListener('blur',   checkNameSpaceWarning);
+document.getElementById('name_kanji').addEventListener('input', checkNameSpaceWarning);
+document.getElementById('name_kana').addEventListener('input',  checkNameSpaceWarning);
+
+// 電話番号の正規化（全角数字・全角ハイフン → 半角）
+function normalizePhone(value) {
+    return value
+        .replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
+        .replace(/[－ー−‐]/g, '-');
+}
+
+['input'].forEach(ev => {
+    ['phone', 'emergency_contact'].forEach(id => {
+        document.getElementById(id).addEventListener(ev, function() {
+            const pos = this.selectionStart;
+            const normalized = normalizePhone(this.value);
+            if (normalized !== this.value) {
+                this.value = normalized;
+                this.setSelectionRange(pos, pos);
+            }
+        });
+    });
+});
+
+// 電話番号フォーマットチェック
+function checkPhoneFormat(inputId, warningId) {
+    const input = document.getElementById(inputId);
+    const warning = document.getElementById(warningId);
+    const val = input.value.trim();
+    // 入力があってハイフン形式でない場合に警告
+    const valid = val.length === 0 || /^\d{2,4}-\d{2,4}-\d{4}$/.test(val);
+    warning.style.display = valid ? 'none' : 'block';
+    input.classList.toggle('is-invalid', !valid && val.length > 0);
+    return !valid && val.length > 0;
+}
+
+function checkAllPhones() {
+    const p = checkPhoneFormat('phone', 'phone_format_warning');
+    const e = checkPhoneFormat('emergency_contact', 'emergency_contact_format_warning');
+    return p || e;
+}
+
+['blur', 'input'].forEach(ev => {
+    document.getElementById('phone').addEventListener(ev, () => checkPhoneFormat('phone', 'phone_format_warning'));
+    document.getElementById('emergency_contact').addEventListener(ev, () => checkPhoneFormat('emergency_contact', 'emergency_contact_format_warning'));
+});
 
 const studentIdInput = document.getElementById('student_id');
 studentIdInput.addEventListener('input', function() {
@@ -338,6 +448,18 @@ document.getElementById('enrollmentForm').addEventListener('submit', function(e)
     if (!form.checkValidity()) {
         e.stopPropagation();
         form.classList.add('was-validated');
+        return;
+    }
+
+    // 氏名スペース警告チェック
+    if (checkNameSpaceWarning()) {
+        document.getElementById('name_kanji').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+    }
+
+    // 電話番号フォーマットチェック
+    if (checkAllPhones()) {
+        document.getElementById('phone').scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
     }
 

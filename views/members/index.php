@@ -25,6 +25,37 @@
 </div>
 
 <!-- 検索・フィルタ -->
+<style>
+.multi-select-wrapper { position: relative; }
+.multi-select-btn {
+    width: 100%; text-align: left; background: #fff; border: 1px solid #ced4da;
+    border-radius: 0.375rem; padding: 0.375rem 2rem 0.375rem 0.75rem;
+    font-size: 1rem; line-height: 1.5; color: #212529; cursor: pointer;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+    background-repeat: no-repeat; background-position: right 0.75rem center; background-size: 16px 12px;
+}
+.multi-select-btn:focus { outline: 0; border-color: #86b7fe; box-shadow: 0 0 0 0.25rem rgba(13,110,253,.25); }
+.multi-select-btn.has-selection { border-color: #0d6efd; color: #0d6efd; font-weight: 500; }
+.multi-select-dropdown {
+    position: absolute; top: calc(100% + 2px); left: 0; min-width: 100%;
+    background: #fff; border: 1px solid #ced4da; border-radius: 0.375rem;
+    z-index: 1050; max-height: 260px; overflow-y: auto; display: none;
+    padding: 0.35rem 0.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+.multi-select-dropdown.show { display: block; }
+.multi-select-item {
+    display: flex; align-items: center; gap: 6px; padding: 4px 4px;
+    cursor: pointer; border-radius: 3px; font-size: 0.9rem; white-space: nowrap;
+}
+.multi-select-item:hover { background: #f0f4ff; }
+.multi-select-item input[type="checkbox"] { cursor: pointer; flex-shrink: 0; }
+.multi-select-group {
+    font-size: 0.72rem; font-weight: 700; color: #6c757d; letter-spacing: 0.03em;
+    padding: 5px 4px 2px; margin-top: 2px; border-top: 1px solid #e9ecef;
+}
+.multi-select-group:first-child { border-top: none; margin-top: 0; }
+</style>
 <div class="card mb-4">
     <div class="card-body">
         <div class="row g-3">
@@ -34,77 +65,84 @@
             </div>
             <div class="col-md-2">
                 <label class="form-label">学年</label>
-                <select class="form-select" id="filterGrade" onchange="loadMembers()">
-                    <option value="">すべて</option>
-                    <option value="1">1年</option>
-                    <option value="2">2年</option>
-                    <option value="3">3年</option>
-                    <option value="4">4年</option>
-                    <option value="5">5年</option>
-                    <option value="6">6年</option>
-                    <option value="M1">M1</option>
-                    <option value="M2">M2</option>
-                    <option value="OB">OB</option>
-                    <option value="OG">OG</option>
-                </select>
+                <div class="multi-select-wrapper">
+                    <button class="multi-select-btn" type="button" id="btn-grade" onclick="toggleMultiSelect('grade')">すべて</button>
+                    <div class="multi-select-dropdown" id="dropdown-grade">
+                        <label class="multi-select-item"><input type="checkbox" value="1" onchange="onFilterChange('grade')"> 1年</label>
+                        <label class="multi-select-item"><input type="checkbox" value="2" onchange="onFilterChange('grade')"> 2年</label>
+                        <label class="multi-select-item"><input type="checkbox" value="3" onchange="onFilterChange('grade')"> 3年</label>
+                        <label class="multi-select-item"><input type="checkbox" value="4" onchange="onFilterChange('grade')"> 4年</label>
+                        <label class="multi-select-item"><input type="checkbox" value="5" onchange="onFilterChange('grade')"> 5年</label>
+                        <label class="multi-select-item"><input type="checkbox" value="6" onchange="onFilterChange('grade')"> 6年</label>
+                        <label class="multi-select-item"><input type="checkbox" value="M1" onchange="onFilterChange('grade')"> M1</label>
+                        <label class="multi-select-item"><input type="checkbox" value="M2" onchange="onFilterChange('grade')"> M2</label>
+                        <label class="multi-select-item"><input type="checkbox" value="OB" onchange="onFilterChange('grade')"> OB</label>
+                        <label class="multi-select-item"><input type="checkbox" value="OG" onchange="onFilterChange('grade')"> OG</label>
+                    </div>
+                </div>
             </div>
             <div class="col-md-2">
                 <label class="form-label">学部</label>
-                <select class="form-select" id="filterFaculty" onchange="loadMembers()">
-                    <option value="">すべて</option>
-                    <option value="基幹理工学部">基幹理工学部</option>
-                    <option value="創造理工学部">創造理工学部</option>
-                    <option value="先進理工学部">先進理工学部</option>
-                </select>
+                <div class="multi-select-wrapper">
+                    <button class="multi-select-btn" type="button" id="btn-faculty" onclick="toggleMultiSelect('faculty')">すべて</button>
+                    <div class="multi-select-dropdown" id="dropdown-faculty">
+                        <label class="multi-select-item"><input type="checkbox" value="基幹理工学部" onchange="onFilterChange('faculty')"> 基幹理工学部</label>
+                        <label class="multi-select-item"><input type="checkbox" value="創造理工学部" onchange="onFilterChange('faculty')"> 創造理工学部</label>
+                        <label class="multi-select-item"><input type="checkbox" value="先進理工学部" onchange="onFilterChange('faculty')"> 先進理工学部</label>
+                    </div>
+                </div>
             </div>
             <div class="col-md-2">
                 <label class="form-label">性別</label>
-                <select class="form-select" id="filterGender" onchange="loadMembers()">
-                    <option value="">すべて</option>
-                    <option value="male">男性</option>
-                    <option value="female">女性</option>
-                </select>
+                <div class="multi-select-wrapper">
+                    <button class="multi-select-btn" type="button" id="btn-gender" onclick="toggleMultiSelect('gender')">すべて</button>
+                    <div class="multi-select-dropdown" id="dropdown-gender">
+                        <label class="multi-select-item"><input type="checkbox" value="male" onchange="onFilterChange('gender')"> 男性</label>
+                        <label class="multi-select-item"><input type="checkbox" value="female" onchange="onFilterChange('gender')"> 女性</label>
+                    </div>
+                </div>
             </div>
             <div class="col-md-2">
                 <label class="form-label">ステータス</label>
-                <select class="form-select" id="filterStatus" onchange="loadMembers()">
-                    <option value="">すべて</option>
-                    <option value="active">現役</option>
-                    <option value="pending">承認待ち</option>
-                    <option value="ob_og">OB/OG</option>
-                    <option value="withdrawn">退会</option>
-                </select>
+                <div class="multi-select-wrapper">
+                    <button class="multi-select-btn" type="button" id="btn-status" onclick="toggleMultiSelect('status')">すべて</button>
+                    <div class="multi-select-dropdown" id="dropdown-status">
+                        <label class="multi-select-item"><input type="checkbox" value="active" onchange="onFilterChange('status')"> 現役</label>
+                        <label class="multi-select-item"><input type="checkbox" value="pending" onchange="onFilterChange('status')"> 承認待ち</label>
+                        <label class="multi-select-item"><input type="checkbox" value="ob_og" onchange="onFilterChange('status')"> OB/OG</label>
+                        <label class="multi-select-item"><input type="checkbox" value="withdrawn" onchange="onFilterChange('status')"> 退会</label>
+                    </div>
+                </div>
             </div>
             <div class="col-md-3">
                 <label class="form-label">学科</label>
-                <select class="form-select" id="filterDepartment" onchange="loadMembers()">
-                    <option value="">すべて</option>
-                    <optgroup label="基幹理工学部">
-                        <option value="数学科">数学科</option>
-                        <option value="応用数理学科">応用数理学科</option>
-                        <option value="機械科学・航空宇宙学科">機械科学・航空宇宙学科</option>
-                        <option value="電子物理システム学科">電子物理システム学科</option>
-                        <option value="情報理工学科">情報理工学科</option>
-                        <option value="情報通信学科">情報通信学科</option>
-                        <option value="表現工学科">表現工学科</option>
-                    </optgroup>
-                    <optgroup label="創造理工学部">
-                        <option value="建築学科">建築学科</option>
-                        <option value="総合機械工学科">総合機械工学科</option>
-                        <option value="経営システム工学科">経営システム工学科</option>
-                        <option value="社会環境工学科">社会環境工学科</option>
-                        <option value="環境資源工学科">環境資源工学科</option>
-                        <option value="社会文化領域">社会文化領域</option>
-                    </optgroup>
-                    <optgroup label="先進理工学部">
-                        <option value="物理学科">物理学科</option>
-                        <option value="応用物理学科">応用物理学科</option>
-                        <option value="化学・生命化学科">化学・生命化学科</option>
-                        <option value="応用化学科">応用化学科</option>
-                        <option value="生命医科学科">生命医科学科</option>
-                        <option value="電気・情報生命工学科">電気・情報生命工学科</option>
-                    </optgroup>
-                </select>
+                <div class="multi-select-wrapper">
+                    <button class="multi-select-btn" type="button" id="btn-department" onclick="toggleMultiSelect('department')">すべて</button>
+                    <div class="multi-select-dropdown" id="dropdown-department">
+                        <div class="multi-select-group">基幹理工学部</div>
+                        <label class="multi-select-item"><input type="checkbox" value="数学科" onchange="onFilterChange('department')"> 数学科</label>
+                        <label class="multi-select-item"><input type="checkbox" value="応用数理学科" onchange="onFilterChange('department')"> 応用数理学科</label>
+                        <label class="multi-select-item"><input type="checkbox" value="機械科学・航空宇宙学科" onchange="onFilterChange('department')"> 機械科学・航空宇宙学科</label>
+                        <label class="multi-select-item"><input type="checkbox" value="電子物理システム学科" onchange="onFilterChange('department')"> 電子物理システム学科</label>
+                        <label class="multi-select-item"><input type="checkbox" value="情報理工学科" onchange="onFilterChange('department')"> 情報理工学科</label>
+                        <label class="multi-select-item"><input type="checkbox" value="情報通信学科" onchange="onFilterChange('department')"> 情報通信学科</label>
+                        <label class="multi-select-item"><input type="checkbox" value="表現工学科" onchange="onFilterChange('department')"> 表現工学科</label>
+                        <div class="multi-select-group">創造理工学部</div>
+                        <label class="multi-select-item"><input type="checkbox" value="建築学科" onchange="onFilterChange('department')"> 建築学科</label>
+                        <label class="multi-select-item"><input type="checkbox" value="総合機械工学科" onchange="onFilterChange('department')"> 総合機械工学科</label>
+                        <label class="multi-select-item"><input type="checkbox" value="経営システム工学科" onchange="onFilterChange('department')"> 経営システム工学科</label>
+                        <label class="multi-select-item"><input type="checkbox" value="社会環境工学科" onchange="onFilterChange('department')"> 社会環境工学科</label>
+                        <label class="multi-select-item"><input type="checkbox" value="環境資源工学科" onchange="onFilterChange('department')"> 環境資源工学科</label>
+                        <label class="multi-select-item"><input type="checkbox" value="社会文化領域" onchange="onFilterChange('department')"> 社会文化領域</label>
+                        <div class="multi-select-group">先進理工学部</div>
+                        <label class="multi-select-item"><input type="checkbox" value="物理学科" onchange="onFilterChange('department')"> 物理学科</label>
+                        <label class="multi-select-item"><input type="checkbox" value="応用物理学科" onchange="onFilterChange('department')"> 応用物理学科</label>
+                        <label class="multi-select-item"><input type="checkbox" value="化学・生命化学科" onchange="onFilterChange('department')"> 化学・生命化学科</label>
+                        <label class="multi-select-item"><input type="checkbox" value="応用化学科" onchange="onFilterChange('department')"> 応用化学科</label>
+                        <label class="multi-select-item"><input type="checkbox" value="生命医科学科" onchange="onFilterChange('department')"> 生命医科学科</label>
+                        <label class="multi-select-item"><input type="checkbox" value="電気・情報生命工学科" onchange="onFilterChange('department')"> 電気・情報生命工学科</label>
+                    </div>
+                </div>
             </div>
             <div class="col-md-1 d-flex align-items-end">
                 <button class="btn btn-outline-secondary w-100" onclick="resetFilters()">
@@ -480,75 +518,84 @@
                     </div>
                     <div class="col-md-4">
                         <label class="form-label">ステータス</label>
-                        <select class="form-select" id="exportStatus">
-                            <option value="">すべて</option>
-                            <option value="active">現役</option>
-                            <option value="pending">承認待ち</option>
-                            <option value="ob_og">OB/OG</option>
-                            <option value="withdrawn">退会</option>
-                        </select>
+                        <div class="multi-select-wrapper">
+                            <button class="multi-select-btn" type="button" id="btn-exportStatus" onclick="toggleMultiSelect('exportStatus')">すべて</button>
+                            <div class="multi-select-dropdown" id="dropdown-exportStatus">
+                                <label class="multi-select-item"><input type="checkbox" value="active" onchange="updateMultiSelectLabel('exportStatus')"> 現役</label>
+                                <label class="multi-select-item"><input type="checkbox" value="pending" onchange="updateMultiSelectLabel('exportStatus')"> 承認待ち</label>
+                                <label class="multi-select-item"><input type="checkbox" value="ob_og" onchange="updateMultiSelectLabel('exportStatus')"> OB/OG</label>
+                                <label class="multi-select-item"><input type="checkbox" value="withdrawn" onchange="updateMultiSelectLabel('exportStatus')"> 退会</label>
+                            </div>
+                        </div>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label">学年</label>
-                        <select class="form-select" id="exportGrade">
-                            <option value="">すべて</option>
-                            <option value="1">1年</option>
-                            <option value="2">2年</option>
-                            <option value="3">3年</option>
-                            <option value="4">4年</option>
-                            <option value="M1">M1</option>
-                            <option value="M2">M2</option>
-                            <option value="OB">OB</option>
-                            <option value="OG">OG</option>
-                        </select>
+                        <div class="multi-select-wrapper">
+                            <button class="multi-select-btn" type="button" id="btn-exportGrade" onclick="toggleMultiSelect('exportGrade')">すべて</button>
+                            <div class="multi-select-dropdown" id="dropdown-exportGrade">
+                                <label class="multi-select-item"><input type="checkbox" value="1" onchange="updateMultiSelectLabel('exportGrade')"> 1年</label>
+                                <label class="multi-select-item"><input type="checkbox" value="2" onchange="updateMultiSelectLabel('exportGrade')"> 2年</label>
+                                <label class="multi-select-item"><input type="checkbox" value="3" onchange="updateMultiSelectLabel('exportGrade')"> 3年</label>
+                                <label class="multi-select-item"><input type="checkbox" value="4" onchange="updateMultiSelectLabel('exportGrade')"> 4年</label>
+                                <label class="multi-select-item"><input type="checkbox" value="5" onchange="updateMultiSelectLabel('exportGrade')"> 5年</label>
+                                <label class="multi-select-item"><input type="checkbox" value="6" onchange="updateMultiSelectLabel('exportGrade')"> 6年</label>
+                                <label class="multi-select-item"><input type="checkbox" value="M1" onchange="updateMultiSelectLabel('exportGrade')"> M1</label>
+                                <label class="multi-select-item"><input type="checkbox" value="M2" onchange="updateMultiSelectLabel('exportGrade')"> M2</label>
+                                <label class="multi-select-item"><input type="checkbox" value="OB" onchange="updateMultiSelectLabel('exportGrade')"> OB</label>
+                                <label class="multi-select-item"><input type="checkbox" value="OG" onchange="updateMultiSelectLabel('exportGrade')"> OG</label>
+                            </div>
+                        </div>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label">性別</label>
-                        <select class="form-select" id="exportGender">
-                            <option value="">すべて</option>
-                            <option value="male">男性</option>
-                            <option value="female">女性</option>
-                        </select>
+                        <div class="multi-select-wrapper">
+                            <button class="multi-select-btn" type="button" id="btn-exportGender" onclick="toggleMultiSelect('exportGender')">すべて</button>
+                            <div class="multi-select-dropdown" id="dropdown-exportGender">
+                                <label class="multi-select-item"><input type="checkbox" value="male" onchange="updateMultiSelectLabel('exportGender')"> 男性</label>
+                                <label class="multi-select-item"><input type="checkbox" value="female" onchange="updateMultiSelectLabel('exportGender')"> 女性</label>
+                            </div>
+                        </div>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label">学部</label>
-                        <select class="form-select" id="exportFaculty">
-                            <option value="">すべて</option>
-                            <option value="基幹理工学部">基幹理工学部</option>
-                            <option value="創造理工学部">創造理工学部</option>
-                            <option value="先進理工学部">先進理工学部</option>
-                        </select>
+                        <div class="multi-select-wrapper">
+                            <button class="multi-select-btn" type="button" id="btn-exportFaculty" onclick="toggleMultiSelect('exportFaculty')">すべて</button>
+                            <div class="multi-select-dropdown" id="dropdown-exportFaculty">
+                                <label class="multi-select-item"><input type="checkbox" value="基幹理工学部" onchange="updateMultiSelectLabel('exportFaculty')"> 基幹理工学部</label>
+                                <label class="multi-select-item"><input type="checkbox" value="創造理工学部" onchange="updateMultiSelectLabel('exportFaculty')"> 創造理工学部</label>
+                                <label class="multi-select-item"><input type="checkbox" value="先進理工学部" onchange="updateMultiSelectLabel('exportFaculty')"> 先進理工学部</label>
+                            </div>
+                        </div>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label">学科</label>
-                        <select class="form-select" id="exportDepartment">
-                            <option value="">すべて</option>
-                            <optgroup label="基幹理工学部">
-                                <option value="数学科">数学科</option>
-                                <option value="応用数理学科">応用数理学科</option>
-                                <option value="機械科学・航空宇宙学科">機械科学・航空宇宙学科</option>
-                                <option value="電子物理システム学科">電子物理システム学科</option>
-                                <option value="情報理工学科">情報理工学科</option>
-                                <option value="情報通信学科">情報通信学科</option>
-                                <option value="表現工学科">表現工学科</option>
-                            </optgroup>
-                            <optgroup label="創造理工学部">
-                                <option value="建築学科">建築学科</option>
-                                <option value="総合機械工学科">総合機械工学科</option>
-                                <option value="経営システム工学科">経営システム工学科</option>
-                                <option value="社会環境工学科">社会環境工学科</option>
-                                <option value="環境資源工学科">環境資源工学科</option>
-                                <option value="社会文化領域">社会文化領域</option>
-                            </optgroup>
-                            <optgroup label="先進理工学部">
-                                <option value="物理学科">物理学科</option>
-                                <option value="応用物理学科">応用物理学科</option>
-                                <option value="化学・生命化学科">化学・生命化学科</option>
-                                <option value="応用化学科">応用化学科</option>
-                                <option value="生命医科学科">生命医科学科</option>
-                                <option value="電気・情報生命工学科">電気・情報生命工学科</option>
-                            </optgroup>
-                        </select>
+                        <div class="multi-select-wrapper">
+                            <button class="multi-select-btn" type="button" id="btn-exportDepartment" onclick="toggleMultiSelect('exportDepartment')">すべて</button>
+                            <div class="multi-select-dropdown" id="dropdown-exportDepartment">
+                                <div class="multi-select-group">基幹理工学部</div>
+                                <label class="multi-select-item"><input type="checkbox" value="数学科" onchange="updateMultiSelectLabel('exportDepartment')"> 数学科</label>
+                                <label class="multi-select-item"><input type="checkbox" value="応用数理学科" onchange="updateMultiSelectLabel('exportDepartment')"> 応用数理学科</label>
+                                <label class="multi-select-item"><input type="checkbox" value="機械科学・航空宇宙学科" onchange="updateMultiSelectLabel('exportDepartment')"> 機械科学・航空宇宙学科</label>
+                                <label class="multi-select-item"><input type="checkbox" value="電子物理システム学科" onchange="updateMultiSelectLabel('exportDepartment')"> 電子物理システム学科</label>
+                                <label class="multi-select-item"><input type="checkbox" value="情報理工学科" onchange="updateMultiSelectLabel('exportDepartment')"> 情報理工学科</label>
+                                <label class="multi-select-item"><input type="checkbox" value="情報通信学科" onchange="updateMultiSelectLabel('exportDepartment')"> 情報通信学科</label>
+                                <label class="multi-select-item"><input type="checkbox" value="表現工学科" onchange="updateMultiSelectLabel('exportDepartment')"> 表現工学科</label>
+                                <div class="multi-select-group">創造理工学部</div>
+                                <label class="multi-select-item"><input type="checkbox" value="建築学科" onchange="updateMultiSelectLabel('exportDepartment')"> 建築学科</label>
+                                <label class="multi-select-item"><input type="checkbox" value="総合機械工学科" onchange="updateMultiSelectLabel('exportDepartment')"> 総合機械工学科</label>
+                                <label class="multi-select-item"><input type="checkbox" value="経営システム工学科" onchange="updateMultiSelectLabel('exportDepartment')"> 経営システム工学科</label>
+                                <label class="multi-select-item"><input type="checkbox" value="社会環境工学科" onchange="updateMultiSelectLabel('exportDepartment')"> 社会環境工学科</label>
+                                <label class="multi-select-item"><input type="checkbox" value="環境資源工学科" onchange="updateMultiSelectLabel('exportDepartment')"> 環境資源工学科</label>
+                                <label class="multi-select-item"><input type="checkbox" value="社会文化領域" onchange="updateMultiSelectLabel('exportDepartment')"> 社会文化領域</label>
+                                <div class="multi-select-group">先進理工学部</div>
+                                <label class="multi-select-item"><input type="checkbox" value="物理学科" onchange="updateMultiSelectLabel('exportDepartment')"> 物理学科</label>
+                                <label class="multi-select-item"><input type="checkbox" value="応用物理学科" onchange="updateMultiSelectLabel('exportDepartment')"> 応用物理学科</label>
+                                <label class="multi-select-item"><input type="checkbox" value="化学・生命化学科" onchange="updateMultiSelectLabel('exportDepartment')"> 化学・生命化学科</label>
+                                <label class="multi-select-item"><input type="checkbox" value="応用化学科" onchange="updateMultiSelectLabel('exportDepartment')"> 応用化学科</label>
+                                <label class="multi-select-item"><input type="checkbox" value="生命医科学科" onchange="updateMultiSelectLabel('exportDepartment')"> 生命医科学科</label>
+                                <label class="multi-select-item"><input type="checkbox" value="電気・情報生命工学科" onchange="updateMultiSelectLabel('exportDepartment')"> 電気・情報生命工学科</label>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -752,6 +799,55 @@ async function loadAcademicYears() {
     }
 }
 
+// --- 複数選択フィルタ ヘルパー ---
+const MULTI_SELECT_LABELS = {
+    grade:  { '1':'1年','2':'2年','3':'3年','4':'4年','5':'5年','6':'6年','M1':'M1','M2':'M2','OB':'OB','OG':'OG' },
+    faculty: { '基幹理工学部':'基幹','創造理工学部':'創造','先進理工学部':'先進' },
+    gender: { 'male':'男性','female':'女性' },
+    status: { 'active':'現役','pending':'承認待ち','ob_og':'OB/OG','withdrawn':'退会' },
+};
+
+function getMultiSelectValues(name) {
+    return Array.from(
+        document.querySelectorAll(`#dropdown-${name} input[type="checkbox"]:checked`)
+    ).map(cb => cb.value);
+}
+
+function updateMultiSelectLabel(name) {
+    const values = getMultiSelectValues(name);
+    const btn = document.getElementById('btn-' + name);
+    if (values.length === 0) {
+        btn.textContent = 'すべて';
+        btn.classList.remove('has-selection');
+    } else {
+        const map = MULTI_SELECT_LABELS[name];
+        const labels = map ? values.map(v => map[v] || v) : values;
+        const text = labels.join(', ');
+        btn.textContent = text.length > 18 ? values.length + '件選択中' : text;
+        btn.classList.add('has-selection');
+    }
+}
+
+function toggleMultiSelect(name) {
+    const dropdown = document.getElementById('dropdown-' + name);
+    const isOpen = dropdown.classList.contains('show');
+    document.querySelectorAll('.multi-select-dropdown.show').forEach(d => d.classList.remove('show'));
+    if (!isOpen) dropdown.classList.add('show');
+}
+
+function onFilterChange(name) {
+    updateMultiSelectLabel(name);
+    currentPage = 1;
+    loadMembers();
+}
+
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.multi-select-wrapper')) {
+        document.querySelectorAll('.multi-select-dropdown.show').forEach(d => d.classList.remove('show'));
+    }
+});
+// --- ここまで ---
+
 async function loadMembers() {
     const academicYear = document.getElementById('academicYearSelect').value;
 
@@ -759,17 +855,17 @@ async function loadMembers() {
         page: 1,
         per_page: 1000,
         search: document.getElementById('searchQuery').value,
-        grade: document.getElementById('filterGrade').value,
-        faculty: document.getElementById('filterFaculty').value,
-        gender: document.getElementById('filterGender').value,
-        department: document.getElementById('filterDepartment').value,
-        status: document.getElementById('filterStatus').value
     });
 
     // 年度パラメータを追加（選択されている場合）
     if (academicYear) {
         params.append('academic_year', academicYear);
     }
+
+    // 複数選択フィルタを配列として送信
+    ['grade', 'faculty', 'gender', 'department', 'status'].forEach(name => {
+        getMultiSelectValues(name).forEach(v => params.append(name + '[]', v));
+    });
 
     try {
         const res = await fetch(`/index.php?route=api/members&${params}`);
@@ -913,11 +1009,10 @@ function goToPage(page) {
 
 function resetFilters() {
     document.getElementById('searchQuery').value = '';
-    document.getElementById('filterGrade').value = '';
-    document.getElementById('filterFaculty').value = '';
-    document.getElementById('filterGender').value = '';
-    document.getElementById('filterDepartment').value = '';
-    document.getElementById('filterStatus').value = '';
+    ['grade', 'faculty', 'gender', 'department', 'status'].forEach(name => {
+        document.querySelectorAll(`#dropdown-${name} input[type="checkbox"]`).forEach(cb => cb.checked = false);
+        updateMultiSelectLabel(name);
+    });
     currentPage = 1;
     loadMembers();
 }
@@ -934,6 +1029,11 @@ function exportExcel() {
         if (opt.selected) o.selected = true;
         destSelect.appendChild(o);
     });
+    // Excelフィルタをリセット
+    ['exportStatus', 'exportGrade', 'exportGender', 'exportFaculty', 'exportDepartment'].forEach(name => {
+        document.querySelectorAll(`#dropdown-${name} input[type="checkbox"]`).forEach(cb => cb.checked = false);
+        updateMultiSelectLabel(name);
+    });
     exportModal.show();
 }
 
@@ -943,13 +1043,17 @@ function exportCheckAll(checked) {
 
 function doExportExcel() {
     const params = new URLSearchParams();
-    const val = (id) => document.getElementById(id).value;
-    if (val('exportYear'))       params.append('academic_year', val('exportYear'));
-    if (val('exportStatus'))     params.append('status',        val('exportStatus'));
-    if (val('exportGrade'))      params.append('grade',         val('exportGrade'));
-    if (val('exportGender'))     params.append('gender',        val('exportGender'));
-    if (val('exportFaculty'))    params.append('faculty',       val('exportFaculty'));
-    if (val('exportDepartment')) params.append('department',    val('exportDepartment'));
+    const yearVal = document.getElementById('exportYear').value;
+    if (yearVal) params.append('academic_year', yearVal);
+
+    // 複数選択フィルタ
+    const exportFilterMap = {
+        exportStatus: 'status', exportGrade: 'grade',
+        exportGender: 'gender', exportFaculty: 'faculty', exportDepartment: 'department'
+    };
+    Object.entries(exportFilterMap).forEach(([dropdownName, paramName]) => {
+        getMultiSelectValues(dropdownName).forEach(v => params.append(paramName + '[]', v));
+    });
 
     // リストの現在の順番でチェック済み項目を取得
     const cols = Array.from(document.querySelectorAll('#exportColumnList .export-col:checked')).map(cb => cb.value);

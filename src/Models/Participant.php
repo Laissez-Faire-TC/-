@@ -52,9 +52,9 @@ class Participant
     public function create(array $data): int
     {
         $sql = "INSERT INTO participants (
-            camp_id, name, grade, gender, join_day, join_timing, leave_day, leave_timing,
+            camp_id, name, grade, gender, allergy, join_day, join_timing, leave_day, leave_timing,
             use_outbound_bus, use_return_bus, use_rental_car
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         // 合宿の総日数を取得（leave_timingのデフォルト値判定に使用）
         $camp = (new Camp())->find($data['camp_id']);
@@ -80,6 +80,7 @@ class Participant
             $data['name'],
             $grade,
             $data['gender'] ?? null,
+            $data['allergy'] ?? null,
             $joinDay,
             $joinTiming,
             $leaveDay,
@@ -106,7 +107,7 @@ class Participant
         $values = [];
 
         $allowedFields = [
-            'name', 'grade', 'gender', 'join_day', 'join_timing', 'leave_day', 'leave_timing',
+            'name', 'grade', 'gender', 'allergy', 'join_day', 'join_timing', 'leave_day', 'leave_timing',
             'use_outbound_bus', 'use_return_bus', 'use_rental_car',
         ];
 

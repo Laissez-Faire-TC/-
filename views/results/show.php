@@ -19,6 +19,14 @@
                 <li><a class="dropdown-item" href="<?= url('/api/camps/' . $campId . '/export/headcount-report') ?>">人数報告表(コスモ)</a></li>
             </ul>
         </div>
+        <div class="dropdown d-inline-block">
+            <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                大学向け出力
+            </button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="<?= url('/api/camps/' . $campId . '/export/activity-meibo') ?>">合宿・遠征届 参加者名簿</a></li>
+            </ul>
+        </div>
     </div>
 </div>
 

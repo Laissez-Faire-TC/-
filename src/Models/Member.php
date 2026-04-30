@@ -23,6 +23,21 @@ class Member
     }
 
     /**
+     * 氏名のスペース正規化
+     * 半角スペース（1つ・2つ以上）や先頭末尾スペースを除去し、
+     * 姓と名の間のスペースを全角スペース1つに統一する。
+     * スペースがない場合（山田太郎）は変更しない。
+     */
+    public static function normalizeJapaneseName(string $name): string
+    {
+        // 先頭・末尾の半角・全角スペースを除去
+        $name = preg_replace('/^[\s　]+|[\s　]+$/u', '', $name);
+        // 連続するスペース（半角・全角の混在含む）を全角スペース1つに統一
+        $name = preg_replace('/[\s　]+/u', '　', $name);
+        return $name;
+    }
+
+    /**
      * 全件取得
      */
     public function all(): array
@@ -63,31 +78,23 @@ class Member
             $params[] = "%{$filters['search']}%";
         }
 
+        // 配列フィルタをIN句に変換するヘルパー
+        $addInFilter = function(string $col, $val) use (&$where, &$params): void {
+            $arr = is_array($val) ? array_values(array_filter($val)) : ($val !== '' && $val !== null ? [$val] : []);
+            if (empty($arr)) return;
+            $placeholders = implode(',', array_fill(0, count($arr), '?'));
+            $where[] = "{$col} IN ({$placeholders})";
+            foreach ($arr as $v) $params[] = $v;
+        };
+
         // フィルタ: 学年
-        if (isset($filters['grade']) && $filters['grade'] !== '') {
-            $where[] = "grade = ?";
-            $params[] = $filters['grade'];
-        }
+        $addInFilter('grade', $filters['grade'] ?? null);
 
         // フィルタ: 学部
-        if (isset($filters['faculty']) && $filters['faculty'] !== '') {
-            $where[] = "faculty = ?";
-            $params[] = $filters['faculty'];
-        }
+        $addInFilter('faculty', $filters['faculty'] ?? null);
 
         // フィルタ: ステータス
-        if (isset($filters['status']) && $filters['status'] !== '') {
-            if (is_array($filters['status'])) {
-                $placeholders = implode(',', array_fill(0, count($filters['status']), '?'));
-                $where[] = "status IN ({$placeholders})";
-                foreach ($filters['status'] as $s) {
-                    $params[] = $s;
-                }
-            } else {
-                $where[] = "status = ?";
-                $params[] = $filters['status'];
-            }
-        }
+        $addInFilter('status', $filters['status'] ?? null);
 
         // フィルタ: 学科未設定
         if (isset($filters['department_not_set']) && $filters['department_not_set'] !== '') {
@@ -102,16 +109,10 @@ class Member
         }
 
         // フィルタ: 性別
-        if (isset($filters['gender']) && $filters['gender'] !== '') {
-            $where[] = "gender = ?";
-            $params[] = $filters['gender'];
-        }
+        $addInFilter('gender', $filters['gender'] ?? null);
 
         // フィルタ: 学科
-        if (isset($filters['department']) && $filters['department'] !== '') {
-            $where[] = "department = ?";
-            $params[] = $filters['department'];
-        }
+        $addInFilter('department', $filters['department'] ?? null);
 
         // フィルタ: 年度
         if (isset($filters['academic_year']) && $filters['academic_year'] !== '') {
@@ -147,23 +148,23 @@ class Member
             $params[] = "%{$filters['search']}%";
         }
 
+        // 配列フィルタをIN句に変換するヘルパー
+        $addInFilter = function(string $col, $val) use (&$where, &$params): void {
+            $arr = is_array($val) ? array_values(array_filter($val)) : ($val !== '' && $val !== null ? [$val] : []);
+            if (empty($arr)) return;
+            $placeholders = implode(',', array_fill(0, count($arr), '?'));
+            $where[] = "{$col} IN ({$placeholders})";
+            foreach ($arr as $v) $params[] = $v;
+        };
+
         // フィルタ: 学年
-        if (isset($filters['grade']) && $filters['grade'] !== '') {
-            $where[] = "grade = ?";
-            $params[] = $filters['grade'];
-        }
+        $addInFilter('grade', $filters['grade'] ?? null);
 
         // フィルタ: 学部
-        if (isset($filters['faculty']) && $filters['faculty'] !== '') {
-            $where[] = "faculty = ?";
-            $params[] = $filters['faculty'];
-        }
+        $addInFilter('faculty', $filters['faculty'] ?? null);
 
         // フィルタ: ステータス
-        if (isset($filters['status']) && $filters['status'] !== '') {
-            $where[] = "status = ?";
-            $params[] = $filters['status'];
-        }
+        $addInFilter('status', $filters['status'] ?? null);
 
         // フィルタ: 学科未設定
         if (isset($filters['department_not_set']) && $filters['department_not_set'] !== '') {
@@ -178,10 +179,10 @@ class Member
         }
 
         // フィルタ: 性別
-        if (isset($filters['gender']) && $filters['gender'] !== '') {
-            $where[] = "gender = ?";
-            $params[] = $filters['gender'];
-        }
+        $addInFilter('gender', $filters['gender'] ?? null);
+
+        // フィルタ: 学科
+        $addInFilter('department', $filters['department'] ?? null);
 
         // フィルタ: 年度
         if (isset($filters['academic_year']) && $filters['academic_year'] !== '') {
@@ -202,12 +203,19 @@ class Member
      */
     public function create(array $data): int
     {
+        if (!empty($data['name_kanji'])) {
+            $data['name_kanji'] = self::normalizeJapaneseName($data['name_kanji']);
+        }
+        if (!empty($data['name_kana'])) {
+            $data['name_kana'] = self::normalizeJapaneseName($data['name_kana']);
+        }
+
         $sql = "INSERT INTO members (
             name_kanji, name_kana, gender, grade, faculty, department,
             student_id, phone, address, emergency_contact, birthdate,
-            allergy, line_name, sns_allowed, sports_registration_no, email,
+            allergy, line_name, sns_allowed, sports_registration_no, sports_registration_shared, email,
             status, department_not_set, enrollment_year, academic_year
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         return $this->db->insert($sql, [
             $data['name_kanji'],
@@ -225,6 +233,7 @@ class Member
             $data['line_name'],
             $data['sns_allowed'] ?? 1,
             $data['sports_registration_no'] ?? null,
+            $data['sports_registration_shared'] ?? 0,
             $data['email'] ?? null,
             $data['status'] ?? self::STATUS_PENDING,
             $data['department_not_set'] ?? 0,
@@ -238,13 +247,20 @@ class Member
      */
     public function update(int $id, array $data): bool
     {
+        if (isset($data['name_kanji'])) {
+            $data['name_kanji'] = self::normalizeJapaneseName($data['name_kanji']);
+        }
+        if (isset($data['name_kana'])) {
+            $data['name_kana'] = self::normalizeJapaneseName($data['name_kana']);
+        }
+
         $fields = [];
         $values = [];
 
         $allowedFields = [
             'name_kanji', 'name_kana', 'gender', 'grade', 'faculty', 'department',
             'student_id', 'phone', 'address', 'emergency_contact', 'birthdate',
-            'allergy', 'line_name', 'sns_allowed', 'sports_registration_no', 'email',
+            'allergy', 'line_name', 'sns_allowed', 'sports_registration_no', 'sports_registration_shared', 'email',
             'status', 'department_not_set', 'enrollment_year', 'academic_year',
         ];
 

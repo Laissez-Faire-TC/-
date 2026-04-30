@@ -46,6 +46,17 @@ if (!class_exists('CampToken')) {
         }
 
         /**
+         * 最新のトークンを合宿IDで取得（is_active に関わらず）
+         */
+        public function findLatestByCampId(int $campId): ?array
+        {
+            return $this->db->fetch(
+                "SELECT * FROM camp_tokens WHERE camp_id = ? ORDER BY created_at DESC LIMIT 1",
+                [$campId]
+            );
+        }
+
+        /**
          * 有効なトークンを合宿IDで取得
          */
         public function findActiveByCampId(int $campId): ?array

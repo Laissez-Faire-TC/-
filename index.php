@@ -69,6 +69,7 @@ $router->get('/api/camps/{id}/application-url', 'CampController@getApplicationUr
 $router->post('/api/camps/{id}/application-url', 'CampController@generateApplicationUrl');
 $router->put('/api/camps/{id}/application-url', 'CampController@updateApplicationUrl');
 $router->get('/api/camps/{id}/applications', 'CampController@getApplications');
+$router->post('/api/applications/{id}/apply-member-edit', 'CampController@applyMemberEdit');
 
 // タイムスロットルート
 $router->get('/api/camps/{id}/time-slots', 'TimeSlotController@index');
@@ -99,10 +100,20 @@ $router->get('/api/camps/{id}/export/insurance-roster', 'ExportController@insura
 $router->get('/api/camps/{id}/export/participant-roster-cosmo', 'ExportController@participantRosterCosmo');
 $router->get('/api/camps/{id}/export/headcount-report', 'ExportController@headcountReport');
 $router->get('/api/camps/{id}/export/headcount-report-mycom', 'ExportController@headcountReportMycom');
+$router->get('/api/camps/{id}/export/allergy-list', 'ExportController@allergyList');
+$router->get('/api/camps/{id}/export/activity-meibo', 'ExportController@activityMeibo');
 
 // チャットボットルート
 $router->get('/api/chatbot/status', 'ChatbotController@status');
 $router->post('/api/chatbot/ask', 'ChatbotController@ask');
+
+// システム設定ルート
+$router->get('/settings', 'SystemSettingsController@indexPage');
+$router->get('/api/system-settings', 'SystemSettingsController@get');
+$router->put('/api/system-settings', 'SystemSettingsController@update');
+
+// パスワード変更ルート
+$router->post('/api/auth/change-password', 'AuthController@changePassword');
 
 // PDF読み取りルート
 $router->get('/pdf/upload', 'PdfUploadController@index');
@@ -199,8 +210,6 @@ $router->get('/enroll/confirm', 'EnrollmentController@confirm');
 $router->get('/enroll/complete', 'EnrollmentController@complete');
 
 // 継続入会フォームルート（公開ページ）
-$router->get('/renew', 'RenewalController@search');
-$router->get('/api/renew/search-members', 'RenewalController@searchMembers');
 $router->get('/renew/confirm', 'RenewalController@confirm');
 $router->get('/renew/review', 'RenewalController@review');
 $router->post('/api/renew/submit', 'RenewalController@submit');

@@ -198,7 +198,7 @@ class CampController
         }
 
         $tokenModel = new CampToken();
-        $token = $tokenModel->findActiveByCampId($campId);
+        $token = $tokenModel->findLatestByCampId($campId);
 
         // ベースURL取得
         $baseUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http');
@@ -276,10 +276,10 @@ class CampController
         }
 
         $tokenModel = new CampToken();
-        $token = $tokenModel->findActiveByCampId($campId);
+        $token = $tokenModel->findLatestByCampId($campId);
 
         if (!$token) {
-            Response::error('有効なトークンが見つかりません', 404, 'TOKEN_NOT_FOUND');
+            Response::error('トークンが見つかりません', 404, 'TOKEN_NOT_FOUND');
             return;
         }
 
@@ -294,6 +294,67 @@ class CampController
         } catch (Exception $e) {
             Response::error('更新に失敗しました: ' . $e->getMessage(), 500, 'UPDATE_ERROR');
         }
+    }
+
+    /**
+     * 申し込み時の情報修正を会員名簿に反映
+     */
+    public function applyMemberEdit(array $params): void
+    {
+        $applicationId = (int)$params['id'];
+
+        $applicationModel = new CampApplication();
+        $application = $applicationModel->find($applicationId);
+
+        if (!$application) {
+            Response::error('申し込みが見つかりません', 404, 'NOT_FOUND');
+            return;
+        }
+
+        if (!$application['info_edited']) {
+            Response::error('情報修正がありません', 400, 'NO_EDIT');
+            return;
+        }
+
+        if ($application['member_updated']) {
+            Response::success([], '既に会員名簿に反映済みです');
+            return;
+        }
+
+        $updateData = [];
+        if (!empty($application['edited_name_kanji'])) {
+            $updateData['name_kanji'] = $application['edited_name_kanji'];
+        }
+        if (!empty($application['edited_grade'])) {
+            $updateData['grade'] = $application['edited_grade'];
+        }
+        if (!empty($application['edited_gender'])) {
+            $updateData['gender'] = $application['edited_gender'];
+        }
+        if (!empty($application['edited_faculty'])) {
+            $updateData['faculty'] = $application['edited_faculty'];
+        }
+        if (!empty($application['edited_department'])) {
+            $updateData['department'] = $application['edited_department'];
+        }
+        if (!empty($application['edited_address'])) {
+            $updateData['address'] = $application['edited_address'];
+        }
+        if (!empty($application['edited_allergy'])) {
+            $updateData['allergy'] = $application['edited_allergy'];
+        }
+        if (!empty($application['edited_line_name'])) {
+            $updateData['line_name'] = $application['edited_line_name'];
+        }
+
+        if (!empty($updateData)) {
+            $memberModel = new Member();
+            $memberModel->update($application['member_id'], $updateData);
+        }
+
+        $applicationModel->update($applicationId, ['member_updated' => 1]);
+
+        Response::success([], '会員名簿に反映しました');
     }
 
     /**

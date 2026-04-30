@@ -49,6 +49,11 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link" href="/settings">
+                            <i class="bi bi-gear"></i> システム設定
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="/guide">
                             <i class="bi bi-question-circle"></i> 使い方
                         </a>

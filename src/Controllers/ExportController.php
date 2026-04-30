@@ -148,6 +148,52 @@ class ExportController
     }
 
     /**
+     * 合宿・遠征届 参加者名簿 Excel出力
+     */
+    public function activityMeibo(array $params): void
+    {
+        $campId = (int)$params['id'];
+
+        $campModel = new Camp();
+        $camp = $campModel->find($campId);
+
+        if (!$camp) {
+            Response::error('合宿が見つかりません', 404, 'NOT_FOUND');
+        }
+
+        try {
+            $exportService = new ExportService();
+            $exportService->generateActivityMeibo($campId);
+
+        } catch (Exception $e) {
+            Response::error('名簿出力に失敗しました: ' . $e->getMessage(), 500, 'EXPORT_ERROR');
+        }
+    }
+
+    /**
+     * アレルギーリストPDF出力
+     */
+    public function allergyList(array $params): void
+    {
+        $campId = (int)$params['id'];
+
+        $campModel = new Camp();
+        $camp = $campModel->find($campId);
+
+        if (!$camp) {
+            Response::error('合宿が見つかりません', 404, 'NOT_FOUND');
+        }
+
+        try {
+            $exportService = new ExportService();
+            $exportService->generateAllergyListPdf($campId);
+
+        } catch (Exception $e) {
+            Response::error('アレルギーリスト出力に失敗しました: ' . $e->getMessage(), 500, 'EXPORT_ERROR');
+        }
+    }
+
+    /**
      * 人数報告書Excel出力（マイコム形式）
      */
     public function headcountReportMycom(array $params): void

@@ -82,21 +82,21 @@ class EventApplication
      * 申し込み（UPSERT）
      * $status = 'submitted' or 'waitlisted'
      */
-    public function apply(int $eventId, int $memberId, string $status = 'submitted'): bool
+    public function apply(int $eventId, int $memberId, string $status = 'submitted', ?string $note = null): bool
     {
         $existing = $this->findByEventAndMember($eventId, $memberId);
 
         if ($existing) {
             return $this->db->execute(
-                "UPDATE event_applications SET status = ?, promoted = 0, updated_at = NOW()
+                "UPDATE event_applications SET status = ?, note = ?, promoted = 0, updated_at = NOW()
                  WHERE event_id = ? AND member_id = ?",
-                [$status, $eventId, $memberId]
+                [$status, $note, $eventId, $memberId]
             ) >= 0;
         }
 
         $this->db->insert(
-            "INSERT INTO event_applications (event_id, member_id, status, promoted) VALUES (?, ?, ?, 0)",
-            [$eventId, $memberId, $status]
+            "INSERT INTO event_applications (event_id, member_id, status, note, promoted) VALUES (?, ?, ?, ?, 0)",
+            [$eventId, $memberId, $status, $note]
         );
         return true;
     }

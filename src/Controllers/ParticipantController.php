@@ -66,7 +66,7 @@ class ParticipantController
         }
 
         $data = Request::only([
-            'name', 'grade', 'gender', 'join_day', 'join_timing', 'leave_day', 'leave_timing',
+            'name', 'grade', 'gender', 'allergy', 'join_day', 'join_timing', 'leave_day', 'leave_timing',
             'use_outbound_bus', 'use_return_bus', 'use_rental_car',
         ]);
 
@@ -103,7 +103,7 @@ class ParticipantController
         }
 
         $data = Request::only([
-            'name', 'grade', 'gender', 'join_day', 'join_timing', 'leave_day', 'leave_timing',
+            'name', 'grade', 'gender', 'allergy', 'join_day', 'join_timing', 'leave_day', 'leave_timing',
             'use_outbound_bus', 'use_return_bus', 'use_rental_car',
         ]);
 

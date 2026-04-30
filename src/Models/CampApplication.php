@@ -40,7 +40,8 @@ if (!class_exists('CampApplication')) {
         public function getByCampId(int $campId): array
         {
             return $this->db->fetchAll(
-                "SELECT ca.*, m.name_kanji, m.name_kana, m.grade as member_grade, m.gender
+                "SELECT ca.*, m.name_kanji, m.name_kana, m.grade as member_grade, m.gender,
+                        m.faculty as member_faculty, m.department as member_department
                  FROM camp_applications ca
                  JOIN members m ON ca.member_id = m.id
                  WHERE ca.camp_id = ?
@@ -86,12 +87,17 @@ if (!class_exists('CampApplication')) {
         {
             $sql = "INSERT INTO camp_applications (
                 camp_id, member_id, participant_id, join_day, join_timing, leave_day, leave_timing,
-                use_outbound_bus, use_return_bus, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                use_outbound_bus, use_return_bus, status,
+                edited_name_kanji, edited_grade, edited_gender, edited_faculty, edited_department,
+                edited_address, edited_allergy, edited_line_name,
+                info_edited, member_updated, note
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
             // 合宿の総日数を取得
             $camp = (new Camp())->find($data['camp_id']);
             $totalDays = $camp ? $camp['nights'] + 1 : 4;
+
+            $infoEdited = !empty($data['info_edited']) ? 1 : 0;
 
             return $this->db->insert($sql, [
                 $data['camp_id'],
@@ -104,6 +110,17 @@ if (!class_exists('CampApplication')) {
                 $data['use_outbound_bus'] ?? 1,
                 $data['use_return_bus'] ?? 1,
                 $data['status'] ?? 'submitted',
+                $infoEdited ? ($data['edited_name_kanji'] ?? null) : null,
+                $infoEdited ? ($data['edited_grade'] ?? null) : null,
+                $infoEdited ? ($data['edited_gender'] ?? null) : null,
+                $infoEdited ? ($data['edited_faculty'] ?? null) : null,
+                $infoEdited ? ($data['edited_department'] ?? null) : null,
+                $infoEdited ? ($data['edited_address'] ?? null) : null,
+                $infoEdited ? ($data['edited_allergy'] ?? null) : null,
+                $infoEdited ? ($data['edited_line_name'] ?? null) : null,
+                $infoEdited,
+                0,
+                $data['note'] ?? null,
             ]);
         }
 
@@ -117,7 +134,10 @@ if (!class_exists('CampApplication')) {
 
             $allowedFields = [
                 'participant_id', 'join_day', 'join_timing', 'leave_day', 'leave_timing',
-                'use_outbound_bus', 'use_return_bus', 'status'
+                'use_outbound_bus', 'use_return_bus', 'status',
+                'edited_name_kanji', 'edited_grade', 'edited_gender', 'edited_faculty', 'edited_department',
+                'edited_address', 'edited_allergy', 'edited_line_name',
+                'info_edited', 'member_updated', 'note',
             ];
 
             foreach ($allowedFields as $field) {
@@ -166,19 +186,28 @@ if (!class_exists('CampApplication')) {
                 // 2. 参加者テーブルにレコード作成
                 $participantModel = new Participant();
 
+                // 情報修正がある場合は有効値を使用
+                $infoEdited = !empty($applicationData['info_edited']);
+                $effectiveName   = ($infoEdited && !empty($applicationData['edited_name_kanji'])) ? $applicationData['edited_name_kanji'] : $member['name_kanji'];
+                $effectiveGrade  = ($infoEdited && !empty($applicationData['edited_grade']))      ? $applicationData['edited_grade']      : $member['grade'];
+                $effectiveGender = ($infoEdited && !empty($applicationData['edited_gender']))     ? $applicationData['edited_gender']     : $member['gender'];
+
                 // 学年の変換（会員マスタのgradeをparticipantsのgradeに変換）
                 $participantGrade = null;
-                if (in_array($member['grade'], ['1', '2', '3', '4'])) {
-                    $participantGrade = (int)$member['grade'];
-                } elseif (in_array($member['grade'], ['OB', 'OG'])) {
+                if (in_array($effectiveGrade, ['1', '2', '3', '4'])) {
+                    $participantGrade = (int)$effectiveGrade;
+                } elseif (in_array($effectiveGrade, ['OB', 'OG'])) {
                     $participantGrade = 0;
                 }
 
+                $effectiveAllergy = ($infoEdited && isset($applicationData['edited_allergy'])) ? $applicationData['edited_allergy'] : ($member['allergy'] ?? null);
+
                 $participantId = $participantModel->create([
                     'camp_id' => $applicationData['camp_id'],
-                    'name' => $member['name_kanji'],
+                    'name' => $effectiveName,
                     'grade' => $participantGrade,
-                    'gender' => $member['gender'],
+                    'gender' => $effectiveGender,
+                    'allergy' => $effectiveAllergy,
                     'join_day' => $applicationData['join_day'] ?? 1,
                     'join_timing' => $applicationData['join_timing'] ?? 'outbound_bus',
                     'leave_day' => $applicationData['leave_day'],

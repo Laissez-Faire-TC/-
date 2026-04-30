@@ -62,6 +62,34 @@
 </div>
 <?php endif; ?>
 
+<?php if ($renewOpen): ?>
+<!-- 継続入会 -->
+<h6 class="text-uppercase text-muted fw-bold mb-3 small">継続入会</h6>
+<div class="card border-success mb-4">
+    <div class="card-header bg-success bg-opacity-10 border-success">
+        <i class="bi bi-arrow-repeat"></i> <?= htmlspecialchars((string)$renewYear) ?>年度 継続入会受付中
+    </div>
+    <div class="d-flex justify-content-between align-items-center p-3">
+        <div>
+            <?php if ($alreadyRenewed): ?>
+            <span class="text-muted small"><?= htmlspecialchars((string)$renewYear) ?>年度への継続登録が完了しています</span>
+            <?php else: ?>
+            <span class="small">昨年度の情報を引き継いで<?= htmlspecialchars((string)$renewYear) ?>年度に登録できます</span>
+            <?php endif; ?>
+        </div>
+        <div>
+            <?php if ($alreadyRenewed): ?>
+            <span class="badge bg-success"><i class="bi bi-check-circle"></i> 登録済み</span>
+            <?php else: ?>
+            <a href="/renew/confirm?member_id=<?= (int)$memberId ?>" class="btn btn-success btn-sm">
+                継続入会する <i class="bi bi-arrow-right"></i>
+            </a>
+            <?php endif; ?>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
 <?php if (!empty($activeCamps)): ?>
 <!-- 募集中の合宿 -->
 <h6 class="text-uppercase text-muted fw-bold mb-3 small">募集中の合宿</h6>
@@ -153,12 +181,12 @@
             <?php elseif ($isFull && $ev['allow_waitlist']): ?>
                 <span class="text-muted small me-1">定員満員</span>
                 <button class="btn btn-sm btn-outline-secondary"
-                        onclick="applyEvent(<?= (int)$ev['id'] ?>, this)">キャンセル待ちで申し込む</button>
+                        onclick="showApplyModal(<?= (int)$ev['id'] ?>, true)">キャンセル待ちで申し込む</button>
             <?php elseif ($isFull): ?>
                 <span class="badge bg-danger">定員締め切り</span>
             <?php else: ?>
                 <button class="btn btn-sm btn-primary"
-                        onclick="applyEvent(<?= (int)$ev['id'] ?>, this)">申し込む</button>
+                        onclick="showApplyModal(<?= (int)$ev['id'] ?>, false)">申し込む</button>
             <?php endif; ?>
         </div>
     </div>
@@ -167,7 +195,7 @@
 </div>
 <?php endif; ?>
 
-<?php if (empty($activeCamps) && empty($activeEvents) && empty($pendingCollections) && empty($pendingFees)): ?>
+<?php if (empty($activeCamps) && empty($activeEvents) && empty($pendingCollections) && empty($pendingFees) && !$renewOpen): ?>
 <div class="card mb-4">
     <div class="card-body text-center text-muted py-5">
         <i class="bi bi-calendar-x" style="font-size: 2rem;"></i>
@@ -180,11 +208,50 @@
     <p class="mb-0">ご不明な点は幹事長までご連絡ください</p>
 </div>
 
+<!-- 企画申し込みモーダル -->
+<div class="modal fade" id="applyModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="applyModalTitle">企画申し込み</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <label class="form-label">備考（任意）</label>
+                <textarea class="form-control" id="eventNoteInput" rows="3"
+                          placeholder="幹事への連絡事項があれば入力してください"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-primary" id="applyModalBtn" onclick="submitApplyModal()">申し込む</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
-async function applyEvent(eventId, btn) {
+let _applyEventId = null;
+let _applyWaitlist = false;
+
+function showApplyModal(eventId, isWaitlist) {
+    _applyEventId = eventId;
+    _applyWaitlist = isWaitlist;
+    document.getElementById('applyModalTitle').textContent = isWaitlist ? 'キャンセル待ちで申し込む' : '企画申し込み';
+    document.getElementById('applyModalBtn').textContent = isWaitlist ? 'キャンセル待ちに登録' : '申し込む';
+    document.getElementById('eventNoteInput').value = '';
+    new bootstrap.Modal(document.getElementById('applyModal')).show();
+}
+
+async function submitApplyModal() {
+    const btn = document.getElementById('applyModalBtn');
+    const note = document.getElementById('eventNoteInput').value.trim();
     btn.disabled = true;
     try {
-        const res  = await fetch(`/api/member/events/${eventId}/apply`, { method: 'POST' });
+        const res  = await fetch(`/api/member/events/${_applyEventId}/apply`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ note: note || null }),
+        });
         const data = await res.json();
         if (data.success) {
             location.reload();

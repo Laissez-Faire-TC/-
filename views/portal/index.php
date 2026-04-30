@@ -22,7 +22,7 @@
         </a>
     </div>
     <?php if ($enrollActive ?? false): ?>
-    <div class="col-md-6">
+    <div class="col-12">
         <a href="/enroll" class="text-decoration-none">
             <div class="card h-100 border-success shadow-sm">
                 <div class="card-body d-flex align-items-center p-3">
@@ -38,7 +38,7 @@
         </a>
     </div>
     <?php else: ?>
-    <div class="col-md-6">
+    <div class="col-12">
         <div class="card h-100 border-0 bg-light opacity-75">
             <div class="card-body d-flex align-items-center p-3">
                 <div class="rounded-circle bg-secondary bg-opacity-10 p-2 me-3">
@@ -53,37 +53,6 @@
     </div>
     <?php endif; ?>
 
-    <?php if ($renewActive ?? false): ?>
-    <div class="col-md-6">
-        <a href="/renew" class="text-decoration-none">
-            <div class="card h-100 border-info shadow-sm">
-                <div class="card-body d-flex align-items-center p-3">
-                    <div class="rounded-circle bg-info bg-opacity-10 p-2 me-3">
-                        <i class="bi bi-arrow-repeat text-info" style="font-size: 1.5rem;"></i>
-                    </div>
-                    <div>
-                        <h6 class="mb-0 text-dark">継続入会</h6>
-                        <small class="text-info fw-bold">受付中</small>
-                    </div>
-                </div>
-            </div>
-        </a>
-    </div>
-    <?php else: ?>
-    <div class="col-md-6">
-        <div class="card h-100 border-0 bg-light opacity-75">
-            <div class="card-body d-flex align-items-center p-3">
-                <div class="rounded-circle bg-secondary bg-opacity-10 p-2 me-3">
-                    <i class="bi bi-arrow-repeat text-secondary" style="font-size: 1.5rem;"></i>
-                </div>
-                <div>
-                    <h6 class="mb-0 text-muted">継続入会</h6>
-                    <small class="text-muted">現在受付していません</small>
-                </div>
-            </div>
-        </div>
-    </div>
-    <?php endif; ?>
 </div>
 
 <!-- 案内 -->

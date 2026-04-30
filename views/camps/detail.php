@@ -44,6 +44,8 @@
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h4>参加者一覧 <span class="badge bg-secondary" id="participantCount">0</span></h4>
             <div>
+                <a class="btn btn-outline-success btn-sm me-2" href="/api/camps/<?= (int)$campId ?>/export/activity-meibo">参加者名簿</a>
+                <button class="btn btn-outline-warning btn-sm me-2" onclick="showAllergyListModal()">アレルギーリスト</button>
                 <button class="btn btn-outline-danger btn-sm me-2" onclick="deleteAllParticipants()">全員削除</button>
                 <button class="btn btn-outline-secondary btn-sm me-2" onclick="showCsvImportModal()">CSVインポート</button>
                 <button class="btn btn-primary btn-sm" onclick="showParticipantModal()">+ 参加者を追加</button>
@@ -228,6 +230,12 @@
                             </div>
                         </div>
                     </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">アレルギー</label>
+                        <textarea class="form-control" id="participantAllergy" rows="2" placeholder="例: 卵, 乳, ピーナッツ"></textarea>
+                        <small class="text-muted">アレルギーがある場合は記入してください</small>
+                    </div>
                 </form>
             </div>
             <div class="modal-footer">
@@ -346,6 +354,47 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
                 <button type="button" class="btn btn-primary" onclick="importCsv()">インポート</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 申し込み情報修正確認モーダル -->
+<div class="modal fade" id="appEditModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-pencil-square text-warning"></i> 申し込み時の情報修正</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted mb-3">参加者が申し込み時に修正した内容です。会員名簿への反映を確認してください。</p>
+                <div id="appEditModalContent"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+                <button type="button" class="btn btn-primary" id="appEditApplyBtn">
+                    <i class="bi bi-check-circle"></i> 会員名簿に反映する
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- アレルギーリストモーダル -->
+<div class="modal fade" id="allergyListModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">アレルギーのある参加者</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="allergyListContent"></div>
+            </div>
+            <div class="modal-footer">
+                <a id="allergyListPdfBtn" href="#" target="_blank" class="btn btn-outline-primary me-auto">PDF出力</a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
             </div>
         </div>
     </div>
@@ -571,7 +620,7 @@
 <script>
 const campId = <?= $campId ?>;
 let campData = null;
-let participantModal, expenseModal, csvImportModal, basicInfoModal;
+let participantModal, expenseModal, csvImportModal, basicInfoModal, allergyListModal, appEditModal;
 // 並び替え設定
 let sortConfig = {
     primary: { key: 'grade', direction: 1 },
@@ -583,6 +632,8 @@ document.addEventListener('DOMContentLoaded', () => {
     expenseModal = new bootstrap.Modal(document.getElementById('expenseModal'));
     csvImportModal = new bootstrap.Modal(document.getElementById('csvImportModal'));
     basicInfoModal = new bootstrap.Modal(document.getElementById('basicInfoModal'));
+    allergyListModal = new bootstrap.Modal(document.getElementById('allergyListModal'));
+    appEditModal = new bootstrap.Modal(document.getElementById('appEditModal'));
     loadCampData();
 });
 
@@ -1133,7 +1184,7 @@ function renderParticipants() {
         </div>`;
     }
 
-    let html = warningHtml + '<table class="table table-hover"><thead><tr><th>名前</th><th>学年</th><th>参加期間</th><th>交通</th><th></th></tr></thead><tbody>';
+    let html = warningHtml + '<table class="table table-hover"><thead><tr><th>名前</th><th>学年</th><th>参加期間</th><th>交通</th><th>アレルギー</th><th></th></tr></thead><tbody>';
 
     for (const p of participants) {
         const joinLabel = `${p.join_day}日目${joinTimingLabels[p.join_timing] || ''}`;
@@ -1156,12 +1207,14 @@ function renderParticipants() {
         const gradeGenderLabel = getGradeGenderLabel(p.grade, p.gender);
         const isDuplicate = duplicateIds.includes(p.id);
         const duplicateMark = isDuplicate ? '<span class="text-warning fw-bold" title="同姓同名・同学年の参加者がいます">※</span> ' : '';
+        const allergyBadge = p.allergy ? `<span class="badge bg-warning text-dark" title="${escapeHtml(p.allergy)}">あり</span>` : '';
 
         html += `<tr${isDuplicate ? ' class="table-warning"' : ''}>
             <td>${duplicateMark}${escapeHtml(p.name)}</td>
             <td>${gradeGenderLabel}</td>
             <td>${isFullParticipation ? 'フル参加' : `${joinLabel}～${leaveLabel}`}</td>
             <td>${transportLabel}</td>
+            <td>${allergyBadge}</td>
             <td><button class="btn btn-outline-primary btn-sm" onclick="editParticipant(${p.id})">編集</button></td>
         </tr>`;
     }
@@ -1172,6 +1225,32 @@ function renderParticipants() {
 
 function filterParticipants() {
     renderParticipants();
+}
+
+function showAllergyListModal() {
+    const participants = campData.participants || [];
+    const withAllergy = participants.filter(p => p.allergy && p.allergy.trim() !== '');
+
+    let content;
+    if (withAllergy.length === 0) {
+        content = '<p class="text-muted">アレルギーのある参加者はいません。</p>';
+    } else {
+        content = `<p class="text-muted mb-3">アレルギー情報が登録されている参加者: <strong>${withAllergy.length}名</strong></p>`;
+        content += '<table class="table table-bordered"><thead><tr><th>名前</th><th>学年</th><th>アレルギー内容</th></tr></thead><tbody>';
+        for (const p of withAllergy) {
+            const gradeGenderLabel = getGradeGenderLabel(p.grade, p.gender);
+            content += `<tr>
+                <td>${escapeHtml(p.name)}</td>
+                <td>${gradeGenderLabel}</td>
+                <td>${escapeHtml(p.allergy)}</td>
+            </tr>`;
+        }
+        content += '</tbody></table>';
+    }
+
+    document.getElementById('allergyListContent').innerHTML = content;
+    document.getElementById('allergyListPdfBtn').href = `/index.php?route=api/camps/${campId}/export/allergy-list`;
+    allergyListModal.show();
 }
 
 function showCsvImportModal() {
@@ -1603,6 +1682,9 @@ function showParticipantModal() {
     document.getElementById('useOutboundBus').checked = true;
     document.getElementById('useReturnBus').checked = true;
 
+    // アレルギーをリセット
+    document.getElementById('participantAllergy').value = '';
+
     // レンタカーオプションの表示/非表示
     const rentalCarOption = document.getElementById('rentalCarOption');
     if (campData.use_rental_car) {
@@ -1655,6 +1737,7 @@ function editParticipant(id) {
     document.getElementById('useOutboundBus').checked = p.use_outbound_bus == 1;
     document.getElementById('useReturnBus').checked = p.use_return_bus == 1;
     document.getElementById('useRentalCar').checked = p.use_rental_car == 1;
+    document.getElementById('participantAllergy').value = p.allergy || '';
     document.getElementById('deleteParticipantBtn').style.display = 'block';
 
     // イベントリスナーを再設定
@@ -1742,10 +1825,12 @@ async function saveParticipant(skipDuplicateCheck = false) {
     const name = document.getElementById('participantName').value;
     const grade = gradeVal !== '' ? parseInt(gradeVal) : null;
 
+    const allergyVal = document.getElementById('participantAllergy').value.trim();
     const data = {
         name: name,
         grade: grade,
         gender: genderVal || null,
+        allergy: allergyVal || null,
         join_day: parseInt(document.getElementById('joinDay').value),
         join_timing: document.getElementById('joinTiming').value,
         leave_day: parseInt(document.getElementById('leaveDay').value),
@@ -2613,6 +2698,15 @@ function renderApplicationsList(applications) {
     if (applications.length === 0) {
         html += '<div class="alert alert-info">まだ申し込みはありません</div>';
     } else {
+        // 情報修正ありで未反映の件数を確認
+        const pendingEdits = applications.filter(a => a.info_edited == 1 && a.member_updated == 0);
+        if (pendingEdits.length > 0) {
+            html += `<div class="alert alert-warning">
+                <i class="bi bi-exclamation-triangle"></i>
+                <strong>${pendingEdits.length}名</strong>が申し込み時に情報を修正しています。内容を確認して会員名簿に反映してください。
+            </div>`;
+        }
+
         html += `
             <div class="card">
                 <div class="card-body">
@@ -2626,6 +2720,7 @@ function renderApplicationsList(applications) {
                                     <th>参加期間</th>
                                     <th>交通</th>
                                     <th>申し込み日時</th>
+                                    <th>情報修正</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -2636,13 +2731,25 @@ function renderApplicationsList(applications) {
             if (app.use_outbound_bus) busInfo.push('往');
             if (app.use_return_bus) busInfo.push('復');
 
+            let editCell = '';
+            if (app.info_edited == 1) {
+                if (app.member_updated == 1) {
+                    editCell = '<span class="badge bg-success">名簿反映済</span>';
+                } else {
+                    editCell = `<button class="btn btn-warning btn-sm py-0" onclick="showApplicationEditModal(${app.id})">
+                        <i class="bi bi-pencil"></i> 修正あり
+                    </button>`;
+                }
+            }
+
             html += `
                 <tr>
                     <td>${escapeHtml(app.name_kanji)}</td>
-                    <td>${app.member_grade}年</td>
+                    <td>${escapeHtml(String(app.member_grade))}年</td>
                     <td>${app.join_day}日目〜${app.leave_day}日目</td>
                     <td>${busInfo.length > 0 ? busInfo.join('/') : '車'}</td>
                     <td>${new Date(app.created_at).toLocaleString('ja-JP')}</td>
+                    <td>${editCell}</td>
                 </tr>
             `;
         });
@@ -2656,7 +2763,62 @@ function renderApplicationsList(applications) {
         `;
     }
 
+    // 情報修正モーダルのデータをキャッシュ
+    window._applicationsCache = applications;
+
     container.innerHTML = html;
+}
+
+function showApplicationEditModal(applicationId) {
+    const app = (window._applicationsCache || []).find(a => a.id == applicationId);
+    if (!app) return;
+
+    const gradeLabel = v => v ? String(v) + '年' : '未設定';
+    const genderLabel = v => v === 'male' ? '男性' : v === 'female' ? '女性' : '未設定';
+
+    const rows = [
+        { label: '名前',   orig: app.name_kanji,        edited: app.edited_name_kanji },
+        { label: '学年',   orig: gradeLabel(app.member_grade), edited: app.edited_grade ? gradeLabel(app.edited_grade) : null },
+        { label: '性別',   orig: genderLabel(app.gender),      edited: app.edited_gender ? genderLabel(app.edited_gender) : null },
+        { label: '学部',   orig: app.member_faculty,    edited: app.edited_faculty },
+        { label: '学科',   orig: app.member_department, edited: app.edited_department },
+    ];
+
+    let tableHtml = '<table class="table table-sm table-bordered"><thead><tr><th>項目</th><th>会員名簿（現在）</th><th>申し込み時の修正</th></tr></thead><tbody>';
+    rows.forEach(r => {
+        const hasChange = r.edited && r.edited !== r.orig;
+        tableHtml += `<tr${hasChange ? ' class="table-warning"' : ''}>
+            <td>${escapeHtml(r.label)}</td>
+            <td>${escapeHtml(r.orig || '')}</td>
+            <td>${r.edited ? `<strong>${escapeHtml(r.edited)}</strong>` : '<span class="text-muted">変更なし</span>'}</td>
+        </tr>`;
+    });
+    tableHtml += '</tbody></table>';
+
+    document.getElementById('appEditModalContent').innerHTML = tableHtml;
+    document.getElementById('appEditApplyBtn').onclick = () => applyMemberEdit(applicationId);
+    appEditModal.show();
+}
+
+async function applyMemberEdit(applicationId) {
+    if (!confirm('申し込み時の修正内容を会員名簿に反映しますか？')) return;
+
+    try {
+        const res = await fetch(`/index.php?route=api/applications/${applicationId}/apply-member-edit`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+        });
+        const result = await res.json();
+        if (result.success) {
+            appEditModal.hide();
+            showToast('会員名簿に反映しました');
+            loadApplicationsList();
+        } else {
+            alert(result.error?.message || '反映に失敗しました');
+        }
+    } catch (err) {
+        alert('通信エラーが発生しました');
+    }
 }
 </script>
 

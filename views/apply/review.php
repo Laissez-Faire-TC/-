@@ -37,24 +37,63 @@ ob_start();
         <h5 class="mb-3">以下の内容で申し込みます。よろしいですか？</h5>
 
         <div class="card mb-3">
-            <div class="card-header bg-light">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
                 <strong>申し込み者</strong>
+                <?php if ($infoEdited): ?>
+                <span class="badge bg-warning text-dark"><i class="bi bi-pencil"></i> 情報修正あり</span>
+                <?php endif; ?>
             </div>
             <div class="card-body">
                 <table class="table table-sm table-borderless mb-0">
                     <tr>
                         <th width="120">名前:</th>
-                        <td><?= htmlspecialchars($member['name_kanji']) ?></td>
+                        <td>
+                            <?= htmlspecialchars($displayMember['name_kanji']) ?>
+                            <?php if ($infoEdited && $displayMember['name_kanji'] !== $member['name_kanji']): ?>
+                            <small class="text-muted ms-2"><s><?= htmlspecialchars($member['name_kanji']) ?></s></small>
+                            <?php endif; ?>
+                        </td>
                     </tr>
                     <tr>
                         <th>学年:</th>
-                        <td><?= htmlspecialchars($member['grade']) ?>年</td>
+                        <td>
+                            <?= htmlspecialchars($displayMember['grade']) ?>年
+                            <?php if ($infoEdited && $displayMember['grade'] !== $member['grade']): ?>
+                            <small class="text-muted ms-2"><s><?= htmlspecialchars($member['grade']) ?>年</s></small>
+                            <?php endif; ?>
+                        </td>
                     </tr>
                     <tr>
-                        <th>学部学科:</th>
-                        <td><?= htmlspecialchars($member['faculty']) ?> <?= htmlspecialchars($member['department']) ?></td>
+                        <th>住所:</th>
+                        <td>
+                            <?= htmlspecialchars($displayMember['address']) ?>
+                            <?php if ($infoEdited && $displayMember['address'] !== $member['address']): ?>
+                            <small class="text-muted ms-2"><s><?= htmlspecialchars($member['address']) ?></s></small>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>アレルギー:</th>
+                        <td>
+                            <?= htmlspecialchars($displayMember['allergy'] ?? '') ?: '<span class="text-muted">なし</span>' ?>
+                            <?php if ($infoEdited && ($displayMember['allergy'] ?? '') !== ($member['allergy'] ?? '')): ?>
+                            <small class="text-muted ms-2"><s><?= htmlspecialchars($member['allergy'] ?? 'なし') ?></s></small>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>LINE名:</th>
+                        <td>
+                            <?= htmlspecialchars($displayMember['line_name']) ?>
+                            <?php if ($infoEdited && $displayMember['line_name'] !== $member['line_name']): ?>
+                            <small class="text-muted ms-2"><s><?= htmlspecialchars($member['line_name']) ?></s></small>
+                            <?php endif; ?>
+                        </td>
                     </tr>
                 </table>
+                <?php if ($infoEdited): ?>
+                <small class="text-muted"><i class="bi bi-info-circle"></i> 修正内容は参加者名簿に反映されます。会員名簿は幹事が確認後に更新します。</small>
+                <?php endif; ?>
             </div>
         </div>
 
@@ -102,6 +141,16 @@ ob_start();
             </div>
         </div>
 
+        <div class="card mb-4">
+            <div class="card-header bg-light">
+                <strong>備考</strong>
+            </div>
+            <div class="card-body">
+                <textarea id="noteInput" class="form-control" rows="3"
+                          placeholder="幹事への連絡事項があれば入力してください（任意）"></textarea>
+            </div>
+        </div>
+
         <div id="errorMessage" class="alert alert-danger d-none"></div>
 
         <div class="d-flex gap-2">
@@ -131,6 +180,16 @@ async function submitApplication() {
         leave_timing: '<?= $leaveTiming ?>',
         use_outbound_bus: <?= $useOutboundBus ? 1 : 0 ?>,
         use_return_bus: <?= $useReturnBus ? 1 : 0 ?>,
+        info_edited: <?= $infoEdited ? 1 : 0 ?>,
+        edited_name_kanji:  <?= json_encode($editedNameKanji) ?>,
+        edited_grade:       <?= json_encode($editedGrade) ?>,
+        edited_gender:      <?= json_encode($editedGender) ?>,
+        edited_faculty:     <?= json_encode($editedFaculty) ?>,
+        edited_department:  <?= json_encode($editedDepartment) ?>,
+        edited_address:     <?= json_encode($editedAddress) ?>,
+        edited_allergy:     <?= json_encode($editedAllergy) ?>,
+        edited_line_name:   <?= json_encode($editedLineName) ?>,
+        note:               document.getElementById('noteInput').value.trim() || null,
     };
 
     try {

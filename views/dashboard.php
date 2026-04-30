@@ -129,6 +129,17 @@
         </a>
     </div>
     <div class="col-md-4 col-sm-6">
+        <a href="/settings" class="dashboard-card card shadow-sm h-100 text-decoration-none">
+            <div class="card-body d-flex align-items-center gap-3 p-4">
+                <div class="dashboard-icon text-secondary"><i class="bi bi-gear"></i></div>
+                <div>
+                    <h5 class="mb-1">システム設定</h5>
+                    <small class="text-muted">AIモデル設定・パスワード変更</small>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-4 col-sm-6">
         <a href="/guide" class="dashboard-card card shadow-sm h-100 text-decoration-none">
             <div class="card-body d-flex align-items-center gap-3 p-4">
                 <div class="dashboard-icon text-info"><i class="bi bi-question-circle"></i></div>
