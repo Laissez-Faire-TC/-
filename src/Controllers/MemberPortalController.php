@@ -407,6 +407,106 @@ class MemberPortalController
     }
 
     /**
+     * プロフィール編集ページ
+     * GET /member/profile
+     */
+    public function profilePage(array $params): void
+    {
+        if (!$this->checkAuth()) {
+            Response::redirect('/member/login');
+            return;
+        }
+
+        $memberId    = (int)($_SESSION['member_id'] ?? 0);
+        $memberModel = new Member();
+        $member      = $memberModel->find($memberId);
+
+        if (!$member) {
+            http_response_code(404);
+            $this->render('error', ['message' => '会員情報が見つかりません']);
+            return;
+        }
+
+        $this->render('member/profile', [
+            'member'     => $member,
+            'memberName' => $_SESSION['member_name'] ?? '',
+            'memberId'   => $memberId,
+            'success'    => $_GET['success'] ?? null,
+        ]);
+    }
+
+    /**
+     * プロフィール更新 API
+     * PUT /api/member/profile
+     */
+    public function updateProfile(array $params): void
+    {
+        if (!$this->checkAuth()) {
+            Response::error('ログインが必要です', 401, 'UNAUTHORIZED');
+            return;
+        }
+
+        $memberId    = (int)($_SESSION['member_id'] ?? 0);
+        $memberModel = new Member();
+        $member      = $memberModel->find($memberId);
+
+        if (!$member) {
+            Response::error('会員情報が見つかりません', 404, 'NOT_FOUND');
+            return;
+        }
+
+        $editableFields = ['phone', 'address', 'emergency_contact', 'email', 'allergy', 'line_name', 'sns_allowed'];
+
+        $newData = [];
+        foreach ($editableFields as $field) {
+            $val = Request::get($field);
+            if ($val !== null) {
+                $newData[$field] = $field === 'sns_allowed' ? (int)(bool)$val : trim($val);
+            }
+        }
+
+        // バリデーション
+        if (empty($newData['phone'])) {
+            Response::error('電話番号は必須です', 400, 'VALIDATION_ERROR');
+            return;
+        }
+        if (empty($newData['address'])) {
+            Response::error('住所は必須です', 400, 'VALIDATION_ERROR');
+            return;
+        }
+        if (empty($newData['emergency_contact'])) {
+            Response::error('緊急連絡先は必須です', 400, 'VALIDATION_ERROR');
+            return;
+        }
+
+        // 変更箇所を記録
+        $changes = [];
+        foreach ($newData as $field => $newVal) {
+            $oldVal = $member[$field] ?? null;
+            if ($field === 'sns_allowed') {
+                $oldVal = (int)$oldVal;
+                $newVal = (int)$newVal;
+            }
+            if ((string)$oldVal !== (string)$newVal) {
+                $changes[$field] = ['before' => $oldVal, 'after' => $newVal];
+            }
+        }
+
+        if (empty($changes)) {
+            Response::success([], '変更はありませんでした');
+            return;
+        }
+
+        $memberModel->update($memberId, $newData);
+
+        // ダッシュボードに通知を記録
+        $notifModel = new MemberChangeNotification();
+        $notifModel->create($memberId, $member['name_kanji'], $member['student_id'], $changes);
+
+        Response::success([], '情報を更新しました');
+    }
+
+    /**
      * デバッグ用（確認後削除）
      */
     public function debugMember(array $params): void

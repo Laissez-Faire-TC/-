@@ -21,6 +21,98 @@
     <p class="text-muted mb-0">サークル管理システム</p>
 </div>
 
+<?php
+$fieldLabels = [
+    'phone'             => '電話番号',
+    'address'           => '住所',
+    'emergency_contact' => '緊急連絡先',
+    'email'             => 'メールアドレス',
+    'allergy'           => 'アレルギー',
+    'line_name'         => 'LINE名',
+    'sns_allowed'       => 'SNS掲載同意',
+];
+?>
+
+<?php if (!empty($changeNotifications)): ?>
+<div class="card mb-4 border-info" id="changeNotifPanel">
+    <div class="card-header bg-info bg-opacity-10 border-info d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-bell-fill text-info"></i> 会員による登録情報の変更通知
+            <span class="badge bg-info ms-1"><?= count($changeNotifications) ?></span>
+        </span>
+        <button class="btn btn-outline-info btn-sm" onclick="dismissAll()">すべて既読にする</button>
+    </div>
+    <div class="card-body p-0" id="notifList">
+        <?php foreach ($changeNotifications as $i => $notif):
+            $changes = json_decode($notif['changes_json'], true) ?? [];
+            $dt = date('n/j H:i', strtotime($notif['created_at']));
+        ?>
+        <div class="p-3 <?= $i < count($changeNotifications) - 1 ? 'border-bottom' : '' ?>" id="notif-<?= (int)$notif['id'] ?>">
+            <div class="d-flex justify-content-between align-items-start">
+                <div class="flex-grow-1">
+                    <div class="fw-semibold mb-1">
+                        <a href="/members?search=<?= urlencode($notif['member_name']) ?>" class="text-decoration-none">
+                            <?= htmlspecialchars($notif['member_name']) ?>
+                        </a>
+                        <span class="text-muted fw-normal small ms-1"><?= htmlspecialchars($notif['student_id']) ?></span>
+                        <span class="text-muted fw-normal small ms-2"><?= $dt ?></span>
+                    </div>
+                    <div class="small text-muted">
+                        <?php foreach ($changes as $field => $diff):
+                            $label  = $fieldLabels[$field] ?? $field;
+                            $before = $diff['before'] ?? '（未設定）';
+                            $after  = $diff['after']  ?? '（未設定）';
+                            if ($field === 'sns_allowed') {
+                                $before = $before ? '同意する' : '同意しない';
+                                $after  = $after  ? '同意する' : '同意しない';
+                            }
+                        ?>
+                        <span class="me-3">
+                            <span class="text-dark"><?= htmlspecialchars($label) ?>：</span>
+                            <span class="text-danger text-decoration-line-through"><?= htmlspecialchars((string)$before) ?></span>
+                            <i class="bi bi-arrow-right mx-1"></i>
+                            <span class="text-success"><?= htmlspecialchars((string)$after) ?></span>
+                        </span>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+                <button class="btn btn-sm btn-outline-secondary ms-3 flex-shrink-0"
+                        onclick="dismiss(<?= (int)$notif['id'] ?>)">既読</button>
+            </div>
+        </div>
+        <?php endforeach; ?>
+    </div>
+</div>
+
+<script>
+async function dismiss(id) {
+    await fetch(`/api/member-change-notifications/${id}/read`, { method: 'POST' });
+    const el = document.getElementById(`notif-${id}`);
+    if (el) el.remove();
+    updateBadge();
+}
+
+async function dismissAll() {
+    const items = document.querySelectorAll('#notifList [id^="notif-"]');
+    await Promise.all([...items].map(el => {
+        const id = el.id.replace('notif-', '');
+        return fetch(`/api/member-change-notifications/${id}/read`, { method: 'POST' });
+    }));
+    document.getElementById('changeNotifPanel').remove();
+}
+
+function updateBadge() {
+    const panel = document.getElementById('changeNotifPanel');
+    if (!panel) return;
+    const remaining = panel.querySelectorAll('[id^="notif-"]').length;
+    if (remaining === 0) {
+        panel.remove();
+    } else {
+        panel.querySelector('.badge').textContent = remaining;
+    }
+}
+</script>
+<?php endif; ?>
+
 <?php if (!empty($activeCamps)): ?>
 <!-- 募集中の合宿 -->
 <div class="card mb-4 border-warning">

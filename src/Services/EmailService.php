@@ -146,6 +146,61 @@ EOT;
     }
 
     /**
+     * 名簿情報変更通知メールを管理者に送信
+     *
+     * @param array $member 変更後の会員情報
+     * @param array $changes 変更されたフィールドの一覧 ['field' => ['before' => ..., 'after' => ...]]
+     * @return bool 成功/失敗
+     */
+    public function sendProfileUpdateNotification(array $member, array $changes): bool
+    {
+        $adminEmail = $this->config['admin_email'] ?? 'info@laissez-faire-tc.com';
+
+        $subject = "【レッセフェールT.C.】会員情報変更通知：{$member['name_kanji']}";
+
+        $fieldLabels = [
+            'phone'            => '電話番号',
+            'address'          => '住所',
+            'emergency_contact'=> '緊急連絡先',
+            'email'            => 'メールアドレス',
+            'allergy'          => 'アレルギー',
+            'line_name'        => 'LINE名',
+            'sns_allowed'      => 'SNS掲載同意',
+        ];
+
+        $changeLines = '';
+        foreach ($changes as $field => $diff) {
+            $label = $fieldLabels[$field] ?? $field;
+            $before = $diff['before'] ?? '（未設定）';
+            $after  = $diff['after']  ?? '（未設定）';
+            if ($field === 'sns_allowed') {
+                $before = $before ? '同意する' : '同意しない';
+                $after  = $after  ? '同意する' : '同意しない';
+            }
+            $changeLines .= "  【{$label}】\n    変更前: {$before}\n    変更後: {$after}\n\n";
+        }
+
+        $body = <<<EOT
+会員が名簿登録情報を変更しました。
+
+■ 変更者
+名前:       {$member['name_kanji']} ({$member['name_kana']})
+学籍番号:   {$member['student_id']}
+学部・学科: {$member['faculty']} {$member['department']}
+学年:       {$member['grade']}年
+
+■ 変更内容
+{$changeLines}
+---
+このメールは自動送信されています。
+
+レッセフェールT.C. 会員管理システム
+EOT;
+
+        return $this->send($adminEmail, $subject, $body, 'profile_update', $member['id']);
+    }
+
+    /**
      * メール送信（内部メソッド）
      *
      * @param string $to 送信先アドレス

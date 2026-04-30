@@ -204,6 +204,18 @@
 </div>
 <?php endif; ?>
 
+<div class="card mb-4">
+    <div class="card-body d-flex justify-content-between align-items-center py-3">
+        <div>
+            <i class="bi bi-person-gear text-secondary"></i>
+            <span class="ms-2 small">電話番号・住所・アレルギー等の変更</span>
+        </div>
+        <a href="/member/profile" class="btn btn-outline-secondary btn-sm">
+            登録情報を変更する <i class="bi bi-chevron-right"></i>
+        </a>
+    </div>
+</div>
+
 <div class="text-muted small text-center mt-4">
     <p class="mb-0">ご不明な点は幹事長までご連絡ください</p>
 </div>

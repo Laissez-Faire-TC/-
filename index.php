@@ -232,6 +232,13 @@ $router->delete('/api/camps/{id}/collection', 'CollectionController@destroy');
 $router->put('/api/collection-items/{id}', 'CollectionController@updateItem');
 $router->post('/api/collection-items/{id}/confirm', 'CollectionController@toggleConfirm');
 
+// 会員プロフィール編集ルート
+$router->get('/member/profile', 'MemberPortalController@profilePage');
+$router->put('/api/member/profile', 'MemberPortalController@updateProfile');
+
+// 会員変更通知既読ルート（管理者）
+$router->post('/api/member-change-notifications/{id}/read', 'PageController@dismissChangeNotification');
+
 // 会員向け集金ルート
 $router->get('/api/member/collections', 'MemberPortalController@myCollections');
 $router->get('/member/collection/{id}', 'MemberPortalController@collectionForm');

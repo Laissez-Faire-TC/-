@@ -17,7 +17,13 @@ class PageController
         $campTokenModel = new CampToken();
         $activeCamps = $campTokenModel->getActiveCampsWithTokens();
 
-        $this->render('dashboard', ['activeCamps' => $activeCamps]);
+        $notifModel = new MemberChangeNotification();
+        $changeNotifications = $notifModel->getUnread();
+
+        $this->render('dashboard', [
+            'activeCamps'         => $activeCamps,
+            'changeNotifications' => $changeNotifications,
+        ]);
     }
 
     /**
@@ -99,6 +105,22 @@ class PageController
         }
 
         $this->render('results/partial-schedule', ['campId' => $campId, 'camp' => $camp]);
+    }
+
+    /**
+     * 会員変更通知を既読にする API
+     * POST /api/member-change-notifications/{id}/read
+     */
+    public function dismissChangeNotification(array $params): void
+    {
+        if (!Auth::check()) {
+            Response::error('ログインが必要です', 401, 'UNAUTHORIZED');
+            return;
+        }
+
+        $notifModel = new MemberChangeNotification();
+        $notifModel->markAsRead((int)$params['id']);
+        Response::success([]);
     }
 
     /**
