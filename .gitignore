@@ -19,3 +19,7 @@ update_user_numbers.php
 
 # 内部gitリポジトリのバックアップ（無視）
 **/.git.bak/
+
+# CA（Claude Agent）内部ファイル
+.ca/
+.claude/rules/ca*

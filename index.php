@@ -262,6 +262,73 @@ $router->get('/api/member/membership-fees', 'MemberPortalController@myFees');
 $router->get('/member/membership-fee/{id}', 'MemberPortalController@membershipFeeForm');
 $router->post('/api/member/membership-fee-items/{id}/submit', 'MemberPortalController@submitFee');
 
+// 合宿しおりルート（管理者用API）
+$router->get('/api/camps/{id}/booklet', 'CampBookletController@show');
+$router->put('/api/camps/{id}/booklet', 'CampBookletController@upsert');
+$router->post('/api/camps/{id}/booklet/token', 'CampBookletController@generateToken');
+$router->get('/api/camps/{id}/booklet/import-schedule', 'CampBookletController@importSchedule');
+$router->get('/api/camps/{id}/booklet/participants', 'CampBookletController@participants');
+
+// 合宿しおり閲覧（会員ログイン済み）
+$router->get('/member/camp/{id}/booklet', 'MemberPortalController@booklet');
+
+// 合宿しおり公開URL（ログイン不要）
+$router->get('/booklet/{token}', 'MemberPortalController@bookletPublic');
+
+// ===== 遠征管理 =====
+// ページ
+$router->get('/expeditions', 'PageController@expeditions');
+$router->get('/expeditions/{id}', 'PageController@expeditionDetail');
+
+// 遠征 CRUD
+$router->get('/api/expeditions', 'ExpeditionController@index');
+$router->post('/api/expeditions', 'ExpeditionController@store');
+$router->get('/api/expeditions/{id}', 'ExpeditionController@show');
+$router->put('/api/expeditions/{id}', 'ExpeditionController@update');
+$router->delete('/api/expeditions/{id}', 'ExpeditionController@destroy');
+
+// 参加者
+$router->get('/api/expeditions/{id}/participants', 'ExpeditionController@getParticipants');
+$router->post('/api/expeditions/{id}/participants', 'ExpeditionController@addParticipant');
+$router->put('/api/expeditions/{id}/participants/{pid}', 'ExpeditionController@updateParticipant');
+$router->delete('/api/expeditions/{id}/participants/{pid}', 'ExpeditionController@removeParticipant');
+
+// 車割（固定パスを先に登録）
+$router->get('/api/expeditions/{id}/cars/settlement', 'ExpeditionController@getSettlement');
+$router->get('/api/expeditions/{id}/cars', 'ExpeditionController@getCars');
+$router->post('/api/expeditions/{id}/cars', 'ExpeditionController@addCar');
+$router->put('/api/expeditions/{id}/cars/{cid}', 'ExpeditionController@updateCar');
+$router->delete('/api/expeditions/{id}/cars/{cid}', 'ExpeditionController@removeCar');
+$router->post('/api/expeditions/{id}/cars/{cid}/members', 'ExpeditionController@addCarMember');
+$router->put('/api/expeditions/{id}/cars/{cid}/members/{mid}', 'ExpeditionController@updateCarMember');
+$router->delete('/api/expeditions/{id}/cars/{cid}/members/{mid}', 'ExpeditionController@removeCarMember');
+$router->post('/api/expeditions/{id}/cars/{cid}/payers', 'ExpeditionController@addCarPayer');
+$router->delete('/api/expeditions/{id}/cars/{cid}/payers/{pid}', 'ExpeditionController@removeCarPayer');
+
+// チーム分け（固定パスを先に登録）
+$router->put('/api/expeditions/{id}/teams/order', 'ExpeditionController@updateTeamOrder');
+$router->get('/api/expeditions/{id}/teams', 'ExpeditionController@getTeams');
+$router->post('/api/expeditions/{id}/teams', 'ExpeditionController@addTeam');
+$router->put('/api/expeditions/{id}/teams/{tid}', 'ExpeditionController@updateTeam');
+$router->delete('/api/expeditions/{id}/teams/{tid}', 'ExpeditionController@removeTeam');
+$router->post('/api/expeditions/{id}/teams/{tid}/members', 'ExpeditionController@addTeamMember');
+$router->delete('/api/expeditions/{id}/teams/{tid}/members/{mid}', 'ExpeditionController@removeTeamMember');
+
+// 集金
+$router->get('/api/expeditions/{id}/collection', 'ExpeditionController@getCollection');
+$router->post('/api/expeditions/{id}/collection/generate', 'ExpeditionController@generateCollection');
+$router->put('/api/expeditions/{id}/collection/{cid}/items/{iid}', 'ExpeditionController@updateCollectionItem');
+
+// 申し込みURL
+$router->get('/api/expeditions/{id}/application-url', 'ExpeditionController@getApplicationUrl');
+$router->post('/api/expeditions/{id}/application-url', 'ExpeditionController@generateApplicationUrl');
+
+// しおり（固定パスを先に登録）
+$router->post('/api/expeditions/{id}/booklet/publish', 'ExpeditionBookletController@publishBooklet');
+$router->get('/api/expeditions/{id}/booklet', 'ExpeditionBookletController@getBooklet');
+$router->post('/api/expeditions/{id}/booklet', 'ExpeditionBookletController@saveBooklet');
+$router->get('/public/expedition-booklet/{token}', 'ExpeditionBookletController@viewPublicBooklet');
+
 // デバッグ用（確認後削除）
 $router->get('/debug-member', 'MemberPortalController@debugMember');
 

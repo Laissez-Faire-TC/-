@@ -68,6 +68,24 @@ class PageController
     }
 
     /**
+     * 遠征一覧ページ
+     */
+    public function expeditions(array $params): void
+    {
+        Auth::requireAuth();
+        $this->render('expeditions/index');
+    }
+
+    /**
+     * 遠征詳細ページ
+     */
+    public function expeditionDetail(array $params): void
+    {
+        Auth::requireAuth();
+        $this->render('expeditions/detail', ['id' => $params['id']]);
+    }
+
+    /**
      * 計算結果ページ
      */
     public function result(array $params): void
