@@ -42,7 +42,7 @@ class ExpeditionController
     public function store(): void
     {
         Request::validate(['name' => 'required', 'start_date' => 'required', 'end_date' => 'required']);
-        $data       = Request::only(['name', 'start_date', 'end_date', 'base_fee', 'pre_night_fee', 'lunch_fee']);
+        $data       = Request::only(['name', 'start_date', 'end_date', 'deadline', 'base_fee', 'pre_night_fee', 'lunch_fee', 'capacity_male', 'capacity_female']);
         $expedition = Expedition::create($data);
         Response::success($expedition, 201);
     }
@@ -53,7 +53,7 @@ class ExpeditionController
      */
     public function update(array $params): void
     {
-        $data       = Request::only(['name', 'start_date', 'end_date', 'base_fee', 'pre_night_fee', 'lunch_fee']);
+        $data       = Request::only(['name', 'start_date', 'end_date', 'deadline', 'base_fee', 'pre_night_fee', 'lunch_fee', 'capacity_male', 'capacity_female', 'expense_deadline']);
         $expedition = Expedition::update($params['id'], $data);
         Response::success($expedition);
     }
@@ -86,7 +86,7 @@ class ExpeditionController
      */
     public function addParticipant(array $params): void
     {
-        $data        = Request::body();
+        $data        = Request::json();
         $participant = ExpeditionParticipant::add($params['id'], $data['member_id']);
         Response::success($participant, 201);
     }
@@ -130,7 +130,7 @@ class ExpeditionController
      */
     public function addCar(array $params): void
     {
-        $data = Request::only(['name', 'capacity', 'rental_fee', 'highway_fee']);
+        $data = Request::only(['name', 'capacity', 'rental_fee', 'highway_fee', 'trip_type']);
         $car  = ExpeditionCar::create($params['id'], $data);
         Response::success($car, 201);
     }
@@ -162,7 +162,7 @@ class ExpeditionController
      */
     public function addCarMember(array $params): void
     {
-        $data   = Request::body();
+        $data   = Request::json();
         $member = ExpeditionCarMember::add($params['cid'], $data['member_id'], $data['role'] ?? 'passenger');
         Response::success($member, 201);
     }
@@ -194,7 +194,7 @@ class ExpeditionController
      */
     public function addCarPayer(array $params): void
     {
-        $data  = Request::body();
+        $data  = Request::json();
         $payer = ExpeditionCarPayer::add($params['cid'], $data['member_id'], $data['amount'] ?? 0);
         Response::success($payer, 201);
     }
@@ -219,6 +219,64 @@ class ExpeditionController
         Response::success($settlement);
     }
 
+    /**
+     * 往路の車割を自動作成
+     * POST /api/expeditions/{id}/cars/auto-assign
+     */
+    public function autoAssignCars(array $params): void
+    {
+        Auth::requireAuth();
+        $body       = Request::json();
+        $capacities = $body['capacities'] ?? [];
+        $result     = ExpeditionCar::autoAssignOutbound((int)$params['id'], $capacities);
+        Response::success($result);
+    }
+
+    /**
+     * 参加者全員の理想的な下車主要駅を解決して返す
+     * POST /api/expeditions/{id}/cars/resolve-stations
+     * 戻り値: { member_id: "高田馬場"|"新宿"|"渋谷"|"東京"|null, ... }
+     *   null = 住所未登録またはジオコーディング失敗
+     */
+    public function resolveParticipantStations(array $params): void
+    {
+        Auth::requireAuth();
+        $participants = ExpeditionParticipant::findByExpedition((int)$params['id']);
+        $result       = [];
+
+        foreach ($participants as $p) {
+            if (empty($p['address'])) {
+                $result[$p['member_id']] = null;
+                continue;
+            }
+            $coords = StationResolverService::geocodeAddress($p['address']);
+            if (!$coords) {
+                $result[$p['member_id']] = null;
+                continue;
+            }
+            $result[$p['member_id']] = StationResolverService::resolveAllByLatLng($coords['lat'], $coords['lng']);
+        }
+
+        Response::success($result);
+    }
+
+    /**
+     * 復路の車割を住所ベースで自動作成
+     * POST /api/expeditions/{id}/cars/auto-assign-return
+     * ボディ: { "mode": "by_station" | "by_driver_home", "capacities": { member_id: capacity, ... }, "preferred_stations": { member_id: "高田馬場"|"新宿"|"渋谷"|"東京", ... } }
+     */
+    public function autoAssignReturnCars(array $params): void
+    {
+        Auth::requireAuth();
+        $body              = Request::json();
+        $mode              = in_array($body['mode'] ?? '', ['by_station', 'by_driver_home'])
+                             ? $body['mode'] : 'by_station';
+        $capacities        = is_array($body['capacities'] ?? null)         ? $body['capacities']         : [];
+        $preferredStations = is_array($body['preferred_stations'] ?? null) ? $body['preferred_stations'] : [];
+        $result            = ExpeditionCar::autoAssignReturn((int)$params['id'], $mode, $capacities, $preferredStations);
+        Response::success($result);
+    }
+
     // ==================== チーム管理 ====================
 
     /**
@@ -227,8 +285,24 @@ class ExpeditionController
      */
     public function getTeams(array $params): void
     {
-        $teams = ExpeditionTeam::findByExpedition($params['id']);
-        Response::success($teams);
+        $expedition_id = (int)$params['id'];
+        $teams         = ExpeditionTeam::findByExpedition($expedition_id);
+
+        // チームに割り当て済みの member_id を収集
+        $assignedMemberIds = [];
+        foreach ($teams as $team) {
+            foreach ($team['members'] as $m) {
+                $assignedMemberIds[] = (int)$m['member_id'];
+            }
+        }
+
+        // 未割り当て参加者（どのチームにも属していない）
+        $allParticipants = ExpeditionParticipant::findByExpedition($expedition_id);
+        $unassigned = array_values(array_filter($allParticipants, function ($p) use ($assignedMemberIds) {
+            return !in_array((int)$p['member_id'], $assignedMemberIds);
+        }));
+
+        Response::success(['unassigned' => $unassigned, 'teams' => $teams]);
     }
 
     /**
@@ -237,7 +311,7 @@ class ExpeditionController
      */
     public function addTeam(array $params): void
     {
-        $data = Request::body();
+        $data = Request::json();
         $team = ExpeditionTeam::create($params['id'], $data['name']);
         Response::success($team, 201);
     }
@@ -269,7 +343,7 @@ class ExpeditionController
      */
     public function addTeamMember(array $params): void
     {
-        $data   = Request::body();
+        $data   = Request::json();
         $member = ExpeditionTeamMember::add($params['tid'], $data['member_id']);
         Response::success($member, 201);
     }
@@ -290,7 +364,7 @@ class ExpeditionController
      */
     public function updateTeamOrder(array $params): void
     {
-        $data = Request::body();
+        $data = Request::json();
         ExpeditionTeamMember::updateOrder($data);
         Response::success(['message' => '並び順を更新しました']);
     }
@@ -313,12 +387,32 @@ class ExpeditionController
      */
     public function generateCollection(array $params): void
     {
-        $body       = Request::body();
+        $body       = Request::json();
         $round      = $body['round'] ?? 1;
         $round      = intval($round);
         $title      = $round === 1 ? '遠征前集金（参加費）' : '遠征後集金（車代清算）';
+
+        // 同じ回次の既存集金を削除（明細はCASCADEで自動削除）
+        ExpeditionCollection::deleteByRound((int)$params['id'], $round);
+
         $collection = ExpeditionCollection::create($params['id'], $round, $title);
         ExpeditionCollection::generateItems($collection['id']);
+        Response::success($collection);
+    }
+
+    /**
+     * 集金期限更新
+     * PUT /api/expeditions/{id}/collection/{cid}
+     */
+    public function updateCollection(array $params): void
+    {
+        $data = Request::only(['deadline']);
+        $db   = Database::getInstance();
+        $db->execute(
+            "UPDATE expedition_collections SET deadline = ? WHERE id = ? AND expedition_id = ?",
+            [$data['deadline'] ?: null, (int)$params['cid'], (int)$params['id']]
+        );
+        $collection = $db->fetch("SELECT * FROM expedition_collections WHERE id = ?", [(int)$params['cid']]);
         Response::success($collection);
     }
 
@@ -342,7 +436,28 @@ class ExpeditionController
     public function getApplicationUrl(array $params): void
     {
         $token = ExpeditionToken::findByExpedition($params['id']);
-        Response::success($token ?: null);
+
+        if (!$token) {
+            Response::success(['has_token' => false]);
+            return;
+        }
+
+        // expires_at を deadline としてマッピングし、有効期限チェック
+        $expiresAt  = $token['expires_at'] ?? null;
+        $isExpired  = $expiresAt && strtotime($expiresAt) < time();
+        $baseUrl    = (isset($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'];
+        $applyUrl   = $baseUrl . '/apply/expedition/' . $token['token'];
+
+        Response::success([
+            'has_token' => true,
+            'url'       => $applyUrl,
+            'token'     => [
+                'id'        => $token['id'],
+                'token'     => $token['token'],
+                'is_active' => $isExpired ? 0 : 1,
+                'deadline'  => $expiresAt,
+            ],
+        ]);
     }
 
     /**
@@ -351,7 +466,20 @@ class ExpeditionController
      */
     public function generateApplicationUrl(array $params): void
     {
-        $token = ExpeditionToken::generate($params['id']);
-        Response::success($token);
+        $token      = ExpeditionToken::generate($params['id']);
+        $expiresAt  = $token['expires_at'] ?? null;
+        $baseUrl    = (isset($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'];
+        $applyUrl   = $baseUrl . '/apply/expedition/' . $token['token'];
+
+        Response::success([
+            'has_token' => true,
+            'url'       => $applyUrl,
+            'token'     => [
+                'id'        => $token['id'],
+                'token'     => $token['token'],
+                'is_active' => 1,
+                'deadline'  => $expiresAt,
+            ],
+        ]);
     }
 }

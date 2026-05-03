@@ -32,6 +32,44 @@
 </div>
 <?php endif; ?>
 
+<?php if (!empty($pendingExpeditionCollections)): ?>
+<h6 class="text-uppercase text-muted fw-bold mb-3 small">遠征 振込確認フォーム</h6>
+<div class="card border-danger mb-4">
+    <div class="card-header bg-danger bg-opacity-10 border-danger">
+        <i class="bi bi-cash-coin"></i> 振込確認をお願いします（遠征）
+    </div>
+    <div class="card-body p-0">
+        <?php foreach ($pendingExpeditionCollections as $i => $pc):
+            $isPastDeadline = !empty($pc['deadline']) && $pc['deadline'] < date('Y-m-d');
+            $roundLabel     = (int)$pc['round'] === 1 ? '第1回' : '第2回';
+            $isRefund       = (int)$pc['amount'] < 0;
+        ?>
+        <div class="d-flex justify-content-between align-items-center p-3 <?= $i < count($pendingExpeditionCollections) - 1 ? 'border-bottom' : '' ?>">
+            <div>
+                <h6 class="mb-1">
+                    <?= htmlspecialchars($pc['expedition_name']) ?>
+                    <span class="badge bg-secondary ms-1"><?= $roundLabel ?></span>
+                </h6>
+                <small class="text-muted">
+                    <?php if ($isRefund): ?>
+                    <span class="text-success">返金 <?= number_format(-(int)$pc['amount']) ?>円</span>
+                    <?php else: ?>
+                    <?= number_format((int)$pc['amount']) ?>円
+                    <?php endif; ?>
+                    <?php if ($isPastDeadline): ?>
+                    <span class="badge bg-danger ms-1">期限超過</span>
+                    <?php elseif (!empty($pc['deadline'])): ?>
+                    ・期限 <?= date('n/j', strtotime($pc['deadline'])) ?>
+                    <?php endif; ?>
+                </small>
+            </div>
+            <a href="/member/expedition-collection/<?= (int)$pc['collection_id'] ?>" class="btn btn-danger btn-sm">振込確認</a>
+        </div>
+        <?php endforeach; ?>
+    </div>
+</div>
+<?php endif; ?>
+
 <?php if (!empty($pendingFees)): ?>
 <h6 class="text-uppercase text-muted fw-bold mb-3 small">入会金振込確認</h6>
 <div class="card border-danger mb-4">
@@ -118,6 +156,204 @@
 </div>
 <?php endif; ?>
 
+<?php if (!empty($activeExpeditions)): ?>
+<!-- 募集中の遠征 -->
+<h6 class="text-uppercase text-muted fw-bold mb-3 small">募集中の遠征</h6>
+<div class="card border-warning mb-4">
+    <div class="card-header bg-warning bg-opacity-25 border-warning">
+        <i class="bi bi-backpack"></i> 申込受付中
+    </div>
+    <div class="card-body p-0">
+        <?php foreach ($activeExpeditions as $i => $ex): ?>
+        <div class="d-flex justify-content-between align-items-center p-3 <?= $i < count($activeExpeditions) - 1 ? 'border-bottom' : '' ?>">
+            <div>
+                <h6 class="mb-1"><?= htmlspecialchars($ex['name']) ?></h6>
+                <small class="text-muted">
+                    <?= date('Y/n/j', strtotime($ex['start_date'])) ?> 〜 <?= date('n/j', strtotime($ex['end_date'])) ?>
+                    <?php
+                    $deadlineDisplay = !empty($ex['deadline']) ? $ex['deadline'] : (!empty($ex['expires_at']) ? $ex['expires_at'] : null);
+                    if ($deadlineDisplay): ?>
+                    &nbsp;・&nbsp;締切 <?= date('n/j', strtotime($deadlineDisplay)) ?>
+                    <?php endif; ?>
+                </small>
+            </div>
+            <?php if ($ex['already_applied']): ?>
+            <span class="badge bg-success"><i class="bi bi-check-circle"></i> 申込済</span>
+            <?php else: ?>
+            <a href="/apply/expedition/<?= htmlspecialchars($ex['token']) ?>" class="btn btn-warning btn-sm">
+                申し込む
+            </a>
+            <?php endif; ?>
+        </div>
+        <?php endforeach; ?>
+    </div>
+</div>
+<?php endif; ?>
+
+<?php if (!empty($expenseExpeditions)): ?>
+<!-- レンタカー費用申請 -->
+<h6 class="text-uppercase text-muted fw-bold mb-3 small">レンタカー費用申請</h6>
+<div class="card border-info mb-4">
+    <div class="card-header bg-info bg-opacity-10 border-info">
+        <i class="bi bi-receipt"></i> 費用申請
+    </div>
+    <div class="card-body p-0">
+        <?php foreach ($expenseExpeditions as $i => $ex): ?>
+        <?php $exp = $ex['my_expense']; ?>
+        <div class="p-3 <?= $i < count($expenseExpeditions) - 1 ? 'border-bottom' : '' ?>">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div>
+                    <h6 class="mb-0"><?= htmlspecialchars($ex['name']) ?></h6>
+                    <small class="text-muted">申請期限: <?= date('Y/n/j', strtotime($ex['expense_deadline'])) ?></small>
+                </div>
+                <?php if ($exp): ?>
+                <span class="badge bg-success"><i class="bi bi-check-circle"></i> 申請済み</span>
+                <?php endif; ?>
+            </div>
+            <!-- 申請フォーム（折りたたみ） -->
+            <div class="accordion" id="expenseAccordion<?= $ex['id'] ?>">
+                <div class="accordion-item border-0">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button <?= $exp ? '' : 'collapsed' ?> py-2 px-3 bg-light" type="button"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#expenseForm<?= $ex['id'] ?>">
+                            <?= $exp ? '申請内容を確認・修正する' : '費用を申請する' ?>
+                        </button>
+                    </h2>
+                    <div id="expenseForm<?= $ex['id'] ?>" class="accordion-collapse collapse <?= $exp ? 'show' : '' ?>">
+                        <div class="accordion-body pt-2">
+                            <div class="row g-2 mb-2">
+                                <div class="col-6">
+                                    <label class="form-label small mb-1">レンタカー代 (円)</label>
+                                    <input type="number" class="form-control form-control-sm" min="0"
+                                           id="rental_<?= $ex['id'] ?>"
+                                           value="<?= (int)($exp['rental_fee'] ?? 0) ?>">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small mb-1">ガソリン代 (円)</label>
+                                    <input type="number" class="form-control form-control-sm" min="0"
+                                           id="gas_<?= $ex['id'] ?>"
+                                           value="<?= (int)($exp['gas_fee'] ?? 0) ?>">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small mb-1">高速料金 (円)</label>
+                                    <input type="number" class="form-control form-control-sm" min="0"
+                                           id="highway_<?= $ex['id'] ?>"
+                                           value="<?= (int)($exp['highway_fee'] ?? 0) ?>">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small mb-1">その他 (円)</label>
+                                    <input type="number" class="form-control form-control-sm" min="0"
+                                           id="other_<?= $ex['id'] ?>"
+                                           value="<?= (int)($exp['other_fee'] ?? 0) ?>">
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label small mb-1">その他の内訳</label>
+                                    <input type="text" class="form-control form-control-sm"
+                                           id="otherDesc_<?= $ex['id'] ?>"
+                                           placeholder="例: 駐車場代"
+                                           value="<?= htmlspecialchars($exp['other_description'] ?? '') ?>">
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label small mb-1">備考</label>
+                                    <input type="text" class="form-control form-control-sm"
+                                           id="note_<?= $ex['id'] ?>"
+                                           value="<?= htmlspecialchars($exp['note'] ?? '') ?>">
+                                </div>
+                            </div>
+                            <div id="expenseErr_<?= $ex['id'] ?>" class="alert alert-danger d-none py-1 small mb-2"></div>
+                            <button class="btn btn-info btn-sm w-100"
+                                    onclick="submitExpense(<?= $ex['id'] ?>)">
+                                <i class="bi bi-send"></i> 申請する
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php endforeach; ?>
+    </div>
+</div>
+<script>
+async function submitExpense(expeditionId) {
+    const body = {
+        rental_fee:        parseInt(document.getElementById('rental_'    + expeditionId).value) || 0,
+        gas_fee:           parseInt(document.getElementById('gas_'       + expeditionId).value) || 0,
+        highway_fee:       parseInt(document.getElementById('highway_'   + expeditionId).value) || 0,
+        other_fee:         parseInt(document.getElementById('other_'     + expeditionId).value) || 0,
+        other_description: document.getElementById('otherDesc_' + expeditionId).value.trim(),
+        note:              document.getElementById('note_'      + expeditionId).value.trim(),
+    };
+    const errEl = document.getElementById('expenseErr_' + expeditionId);
+    errEl.classList.add('d-none');
+
+    try {
+        const res    = await fetch(`/api/member/expedition/${expeditionId}/car-expense`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify(body),
+        });
+        const result = await res.json();
+        if (result.success) {
+            location.reload();
+        } else {
+            errEl.textContent = result.error?.message || '申請に失敗しました';
+            errEl.classList.remove('d-none');
+        }
+    } catch {
+        errEl.textContent = '通信エラーが発生しました';
+        errEl.classList.remove('d-none');
+    }
+}
+</script>
+<?php endif; ?>
+
+<?php if (!empty($expeditionBooklets)): ?>
+<!-- 遠征しおり -->
+<h6 class="text-uppercase text-muted fw-bold mb-3 small">遠征しおり</h6>
+<div class="card border-primary mb-4">
+    <div class="card-header bg-primary bg-opacity-10 border-primary">
+        <i class="bi bi-map"></i> しおりを見る
+    </div>
+    <div class="card-body p-0">
+        <?php foreach ($expeditionBooklets as $i => $eb): ?>
+        <div class="d-flex justify-content-between align-items-center p-3 <?= $i < count($expeditionBooklets) - 1 ? 'border-bottom' : '' ?>">
+            <div>
+                <h6 class="mb-1"><?= htmlspecialchars($eb['name']) ?></h6>
+                <small class="text-muted"><?= date('Y/n/j', strtotime($eb['start_date'])) ?> 〜 <?= date('n/j', strtotime($eb['end_date'])) ?></small>
+            </div>
+            <a href="/public/expedition-booklet/<?= htmlspecialchars($eb['public_token']) ?>" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-map"></i> しおりを開く
+            </a>
+        </div>
+        <?php endforeach; ?>
+    </div>
+</div>
+<?php endif; ?>
+
+<?php if (!empty($bookletCamps)): ?>
+<!-- しおり -->
+<h6 class="text-uppercase text-muted fw-bold mb-3 small">合宿しおり</h6>
+<div class="card border-success mb-4">
+    <div class="card-header bg-success bg-opacity-10 border-success">
+        <i class="bi bi-book"></i> しおりを見る
+    </div>
+    <div class="card-body p-0">
+        <?php foreach ($bookletCamps as $i => $bc): ?>
+        <div class="d-flex justify-content-between align-items-center p-3 <?= $i < count($bookletCamps) - 1 ? 'border-bottom' : '' ?>">
+            <div>
+                <h6 class="mb-1"><?= htmlspecialchars($bc['name']) ?></h6>
+                <small class="text-muted"><?= date('Y/n/j', strtotime($bc['start_date'])) ?> 〜 <?= date('n/j', strtotime($bc['end_date'])) ?></small>
+            </div>
+            <a href="/member/camp/<?= (int)$bc['id'] ?>/booklet" class="btn btn-outline-success btn-sm">
+                <i class="bi bi-book"></i> しおりを開く
+            </a>
+        </div>
+        <?php endforeach; ?>
+    </div>
+</div>
+<?php endif; ?>
+
 <?php if (!empty($activeEvents)): ?>
 <!-- 募集中の企画 -->
 <h6 class="text-uppercase text-muted fw-bold mb-3 small">募集中の企画・イベント</h6>
@@ -195,7 +431,7 @@
 </div>
 <?php endif; ?>
 
-<?php if (empty($activeCamps) && empty($activeEvents) && empty($pendingCollections) && empty($pendingFees) && !$renewOpen): ?>
+<?php if (empty($activeCamps) && empty($activeExpeditions) && empty($activeEvents) && empty($pendingCollections) && empty($pendingExpeditionCollections) && empty($pendingFees) && empty($bookletCamps) && empty($expeditionBooklets) && !$renewOpen): ?>
 <div class="card mb-4">
     <div class="card-body text-center text-muted py-5">
         <i class="bi bi-calendar-x" style="font-size: 2rem;"></i>

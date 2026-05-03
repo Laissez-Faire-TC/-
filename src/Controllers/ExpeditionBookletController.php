@@ -12,21 +12,22 @@ class ExpeditionBookletController
     {
         Auth::requireAuth();
 
-        $booklet = ExpeditionBooklet::findByExpedition($params['id']);
+        $booklet = ExpeditionBooklet::findByExpedition((int)$params['id']);
         if (!$booklet) {
-            // しおりが存在しない場合は空データを返す
             Response::success([
-                'items' => [
-                    'packing_list'   => '',
-                    'car_assignment' => '',
-                    'team_assignment' => '',
-                    'room_assignment' => ''
-                ],
-                'published' => false
+                'published'       => false,
+                'public_token'    => null,
+                'venue'           => '',
+                'meeting_note'    => '',
+                'items_to_bring'  => [],
+                'car_assignment'  => '',
+                'team_assignment' => '',
+                'room_assignments'=> [],
+                'notes'           => '',
             ]);
             return;
         }
-        $booklet['items'] = json_decode($booklet['items'], true);
+
         Response::success($booklet);
     }
 
@@ -38,8 +39,8 @@ class ExpeditionBookletController
     {
         Auth::requireAuth();
 
-        $data    = Request::only(['items']);
-        $booklet = ExpeditionBooklet::save($params['id'], $data['items']);
+        $data    = Request::json();
+        $booklet = ExpeditionBooklet::save((int)$params['id'], $data);
         Response::success($booklet);
     }
 
@@ -51,21 +52,46 @@ class ExpeditionBookletController
     {
         Auth::requireAuth();
 
-        $booklet = ExpeditionBooklet::publish($params['id']);
+        $booklet = ExpeditionBooklet::publish((int)$params['id']);
         Response::success($booklet);
     }
 
     /**
-     * 公開しおり閲覧（認証不要）
+     * 公開しおり閲覧（認証不要・会員ログイン時は強調表示あり）
      * GET /public/expedition-booklet/{token}
      */
     public function viewPublicBooklet(array $params): void
     {
         $booklet = ExpeditionBooklet::findByPublicToken($params['token']);
         if (!$booklet) Response::error('しおりが見つかりません', 404);
-        $booklet['items'] = json_decode($booklet['items'], true);
-        // 公開しおりビューをレンダリング（views/expeditions/booklet_public.php）
-        $this->render('expeditions/booklet_public', ['booklet' => $booklet]);
+
+        // DBから実データ（チーム・車割）を取得して渡す
+        $expeditionId = (int)$booklet['expedition_id'];
+        $dbTeams = ExpeditionTeam::findByExpedition($expeditionId);
+        $dbCars  = ExpeditionCar::findByExpedition($expeditionId);
+
+        // 会員ポータルにログイン中なら自分の情報を取得して強調表示に使う
+        $myMemberId = 0;
+        $myName     = '';
+        $isLoggedIn = false;
+        if (
+            isset($_SESSION['member_authenticated']) &&
+            $_SESSION['member_authenticated'] === true &&
+            (!isset($_SESSION['member_login_time']) || time() - $_SESSION['member_login_time'] <= 86400)
+        ) {
+            $myMemberId = (int)($_SESSION['member_id'] ?? 0);
+            $myName     = $_SESSION['member_name'] ?? '';
+            $isLoggedIn = true;
+        }
+
+        $this->render('expeditions/booklet_public', [
+            'booklet'    => $booklet,
+            'dbTeams'    => $dbTeams,
+            'dbCars'     => $dbCars,
+            'myMemberId' => $myMemberId,
+            'myName'     => $myName,
+            'isLoggedIn' => $isLoggedIn,
+        ]);
     }
 
     /**

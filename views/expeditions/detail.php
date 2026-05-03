@@ -31,6 +31,9 @@
     <li class="nav-item">
         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabBooklet" onclick="loadBooklet()">しおり</button>
     </li>
+    <li class="nav-item">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabCarExpense" onclick="loadCarExpenses()">レンタカー清算</button>
+    </li>
 </ul>
 
 <!-- タブコンテンツ -->
@@ -45,18 +48,67 @@
     <div class="tab-pane fade" id="tabParticipants">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h4>参加者一覧 <span class="badge bg-secondary" id="participantCount">0</span></h4>
-            <button class="btn btn-primary btn-sm" onclick="showAddParticipantModal()">+ 参加者を追加</button>
+            <div class="d-flex gap-2">
+                <a class="btn btn-outline-success btn-sm" id="btnExportXlsx" href="#" target="_blank">
+                    <i class="bi bi-file-earmark-excel"></i> Excel
+                </a>
+                <a class="btn btn-outline-danger btn-sm" id="btnExportPdf" href="#" target="_blank">
+                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                </a>
+                <button class="btn btn-primary btn-sm" onclick="showAddParticipantModal()">+ 参加者を追加</button>
+            </div>
         </div>
         <div id="participantList">読み込み中...</div>
+        <div id="allergySummary" class="mt-3"></div>
     </div>
 
     <!-- ===== タブ3: 車割 ===== -->
     <div class="tab-pane fade" id="tabCars">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h4>車割</h4>
-            <button class="btn btn-primary btn-sm" onclick="showAddCarModal()">+ 車を追加</button>
+        <h4 class="mb-3">車割</h4>
+
+        <!-- 往路/復路 サブタブ -->
+        <ul class="nav nav-tabs mb-3" id="carTripTabs">
+            <li class="nav-item">
+                <a class="nav-link active" data-bs-toggle="tab" href="#carTabOutbound">往路</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" data-bs-toggle="tab" href="#carTabReturn">復路</a>
+            </li>
+        </ul>
+
+        <!-- 推奨下車駅解析バー -->
+        <div class="d-flex align-items-center gap-2 mb-3 p-2 bg-light rounded">
+            <span class="small text-muted">推奨下車駅:</span>
+            <button class="btn btn-outline-secondary btn-sm" id="resolveStationsBtn" onclick="resolveStations()">
+                <i class="bi bi-geo-fill"></i> 解析
+            </button>
+            <span class="small text-muted" id="resolveStationsStatus"></span>
         </div>
-        <div id="carList">読み込み中...</div>
+
+        <div class="tab-content">
+            <!-- 往路 -->
+            <div class="tab-pane fade show active" id="carTabOutbound">
+                <div class="d-flex gap-2 mb-3 flex-wrap">
+                    <button class="btn btn-primary btn-sm" onclick="showAddCarModal('outbound')">+ 車を追加</button>
+                    <button class="btn btn-outline-success btn-sm" onclick="autoAssignOutboundCars()">
+                        <i class="bi bi-magic"></i> 往路を自動作成
+                    </button>
+                </div>
+                <div id="carListOutbound">読み込み中...</div>
+            </div>
+
+            <!-- 復路 -->
+            <div class="tab-pane fade" id="carTabReturn">
+                <div class="d-flex gap-2 mb-3 flex-wrap">
+                    <button class="btn btn-primary btn-sm" onclick="showAddCarModal('return')">+ 車を追加</button>
+                    <button class="btn btn-outline-success btn-sm" onclick="showAutoAssignReturnModal()">
+                        <i class="bi bi-geo-alt"></i> 復路を自動作成
+                    </button>
+                </div>
+                <div id="carListReturn">読み込み中...</div>
+            </div>
+        </div>
+
         <!-- 清算サマリー -->
         <div class="mt-4">
             <div class="d-flex justify-content-between align-items-center mb-2">
@@ -71,7 +123,12 @@
     <div class="tab-pane fade" id="tabTeams">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h4>チーム分け</h4>
-            <button class="btn btn-primary btn-sm" onclick="showAddTeamModal()">+ チームを追加</button>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-success btn-sm" onclick="showAutoAssignModal()">
+                    <i class="bi bi-shuffle"></i> 自動割り当て
+                </button>
+                <button class="btn btn-primary btn-sm" onclick="showAddTeamModal()">+ チームを追加</button>
+            </div>
         </div>
         <div id="teamBoard" class="d-flex flex-wrap gap-3">読み込み中...</div>
     </div>
@@ -91,6 +148,33 @@
         <div id="bookletContent">読み込み中...</div>
     </div>
 
+    <!-- ===== タブ8: レンタカー清算 ===== -->
+    <div class="tab-pane fade" id="tabCarExpense">
+        <!-- 申請期限設定 -->
+        <div class="card mb-3">
+            <div class="card-body py-2">
+                <div class="d-flex align-items-center gap-3 flex-wrap">
+                    <span class="fw-bold small">費用申請期限</span>
+                    <input type="date" class="form-control form-control-sm" id="expenseDeadlineInput" style="width:auto;">
+                    <button class="btn btn-sm btn-outline-primary" onclick="saveExpenseDeadline()">保存</button>
+                    <span id="expenseDeadlineSaved" class="text-success small d-none"><i class="bi bi-check-circle"></i> 保存しました</span>
+                    <div class="ms-auto d-flex gap-2">
+                        <a class="btn btn-outline-success btn-sm" id="btnExpenseXlsx" href="#" target="_blank">
+                            <i class="bi bi-file-earmark-excel"></i> Excel
+                        </a>
+                        <a class="btn btn-outline-danger btn-sm" id="btnExpensePdf" href="#" target="_blank">
+                            <i class="bi bi-file-earmark-pdf"></i> PDF
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- 申請一覧 -->
+        <div id="carExpenseList">読み込み中...</div>
+        <!-- 清算一覧 -->
+        <div id="carSettlementList" class="mt-3"></div>
+    </div>
+
 </div>
 
 <!-- ===== 参加者追加モーダル ===== -->
@@ -103,9 +187,11 @@
             </div>
             <div class="modal-body">
                 <div class="mb-3">
-                    <label class="form-label">会員ID <span class="text-danger">*</span></label>
-                    <input type="number" class="form-control" id="newParticipantMemberId" placeholder="会員IDを入力">
+                    <label class="form-label">名前で検索</label>
+                    <input type="text" class="form-control" id="participantSearchInput" placeholder="氏名またはフリガナを入力" oninput="searchMembers(this.value)">
                 </div>
+                <div id="participantSearchResults"></div>
+                <input type="hidden" id="newParticipantMemberId">
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
@@ -116,6 +202,31 @@
 </div>
 
 <!-- ===== 車追加モーダル ===== -->
+<!-- ===== 往路自動作成モーダル ===== -->
+<div class="modal fade" id="carAutoAssignModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-magic"></i> 往路を自動作成</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-3">
+                    「車の予約をする」で登録した人ごとに車を作成します。<br>
+                    各車の定員を設定してから「実行」を押してください。
+                </p>
+                <div id="autoAssignBookerList"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-success" id="carAutoAssignExecBtn" onclick="executeCarAutoAssign()">
+                    <i class="bi bi-play-fill"></i> 実行
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="modal fade" id="addCarModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -124,6 +235,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
+                <input type="hidden" id="newCarTripType" value="both">
                 <div class="mb-3">
                     <label class="form-label">車名 <span class="text-danger">*</span></label>
                     <input type="text" class="form-control" id="newCarName" placeholder="例: 田中号">
@@ -134,6 +246,19 @@
                         <input type="number" class="form-control" id="newCarCapacity" min="1" value="5">
                         <span class="input-group-text">人</span>
                     </div>
+                </div>
+                <div class="mb-3" id="departureClassField" style="display:none;">
+                    <label class="form-label">出発時限 <span class="text-muted small">（この車に乗れる最遅の授業終了時限）</span></label>
+                    <select class="form-select" id="newCarDepartureClass">
+                        <option value="0">授業なし（早出）</option>
+                        <option value="1">1限終わり</option>
+                        <option value="2">2限終わり</option>
+                        <option value="3">3限終わり</option>
+                        <option value="4">4限終わり</option>
+                        <option value="5">5限終わり</option>
+                        <option value="6">6限終わり（最終）</option>
+                    </select>
+                    <div class="form-text">例: 「3限終わり」を選ぶと、3限以前に授業が終わる人がこの車に割り当てられます</div>
                 </div>
                 <div class="mb-3">
                     <label class="form-label">レンタカー代</label>
@@ -238,6 +363,77 @@
     </div>
 </div>
 
+<!-- ===== 自動割り当てモーダル ===== -->
+<div class="modal fade" id="autoAssignModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">男女バランス自動割り当て</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="autoAssignPreview">読み込み中...</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-success" id="autoAssignExecBtn" onclick="executeAutoAssign()" disabled>
+                    <i class="bi bi-shuffle"></i> 割り当て実行
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== 復路自動作成モーダル ===== -->
+<div class="modal fade" id="autoAssignReturnModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-geo-alt"></i> 復路を自動作成</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-3">
+                    「車の予約をする」で登録した人ごとに車を作成します。<br>
+                    各車の定員と割り当て方式を設定してから「実行」を押してください。
+                </p>
+                <div id="autoAssignReturnDriverList"></div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">割り当て方式</label>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="returnAssignMode"
+                               id="modeByStation" value="by_station" checked>
+                        <label class="form-check-label" for="modeByStation">
+                            <strong>主要駅で固める</strong>
+                            <div class="text-muted small">住所の最寄り路線から高田馬場・新宿・渋谷・東京のどこで降りるか判定し、同じ駅グループを同じ車に</div>
+                        </label>
+                    </div>
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="radio" name="returnAssignMode"
+                               id="modeByDriverHome" value="by_driver_home">
+                        <label class="form-check-label" for="modeByDriverHome">
+                            <strong>家の近くで固める</strong>
+                            <div class="text-muted small">ドライバーの家を軸に、住所が近い参加者を同じ車に</div>
+                        </label>
+                    </div>
+                </div>
+                <div class="alert alert-info small mb-0">
+                    <i class="bi bi-info-circle"></i>
+                    住所が未登録の参加者はデフォルト（高田馬場方面）として扱われます。<br>
+                    処理に数秒かかる場合があります（住所ごとにAPI呼び出し）。
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-success" id="autoAssignReturnExecBtn"
+                        onclick="autoAssignReturnCars()">
+                    <i class="bi bi-play-fill"></i> 実行
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- SortableJS CDN（チーム分けD&D用） -->
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 
@@ -251,10 +447,12 @@ let carsLoaded = false;
 let teamsLoaded = false;
 let applicationLoaded = false;
 let collectionLoaded = false;
-let bookletLoaded = false;
+let _bookletData      = null;
+let _bookletSaving    = false;
+let _bookletSaveTimer = null;
 
 // モーダルインスタンス
-let addParticipantModal, addCarModal, addCarMemberModal, addCarPayerModal, addTeamModal;
+let addParticipantModal, addCarModal, addCarMemberModal, addCarPayerModal, addTeamModal, autoAssignModal, carAutoAssignModal, autoAssignReturnModal;
 
 // 現在操作中の車ID（乗員・立替者追加時に使用）
 let currentCarId = null;
@@ -266,9 +464,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // モーダルを初期化
     addParticipantModal = new bootstrap.Modal(document.getElementById('addParticipantModal'));
     addCarModal         = new bootstrap.Modal(document.getElementById('addCarModal'));
+    carAutoAssignModal  = new bootstrap.Modal(document.getElementById('carAutoAssignModal'));
     addCarMemberModal   = new bootstrap.Modal(document.getElementById('addCarMemberModal'));
     addCarPayerModal    = new bootstrap.Modal(document.getElementById('addCarPayerModal'));
     addTeamModal        = new bootstrap.Modal(document.getElementById('addTeamModal'));
+    autoAssignModal       = new bootstrap.Modal(document.getElementById('autoAssignModal'));
+    autoAssignReturnModal = new bootstrap.Modal(document.getElementById('autoAssignReturnModal'));
 
     // ページロード時に基本情報を取得
     loadBasicInfo();
@@ -315,24 +516,51 @@ async function loadBasicInfo() {
     }
 }
 
+let _basicSaveTimer = null;
+
+function scheduleBasicSave() {
+    clearTimeout(_basicSaveTimer);
+    _basicSaveTimer = setTimeout(() => saveBasicInfo(true), 1500);
+}
+
+function setBasicSaveStatus(status) {
+    const el = document.getElementById('basicSaveStatus');
+    if (!el) return;
+    if (status === 'saving') el.textContent = '保存中...';
+    else if (status === 'saved') el.textContent = '自動保存済み';
+    else if (status === 'error') el.textContent = '保存失敗';
+}
+
 function renderBasicInfo(e) {
     document.getElementById('basicInfo').innerHTML = `
         <div class="card">
-            <div class="card-header">基本情報を編集</div>
+            <div class="card-header d-flex justify-content-between align-items-center">
+                基本情報を編集
+                <span id="basicSaveStatus" class="text-muted small"></span>
+            </div>
             <div class="card-body">
                 <form id="basicInfoForm">
                     <div class="mb-3">
                         <label class="form-label">イベント名 <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="editName" value="${escapeHtml(e.name)}" required>
+                        <input type="text" class="form-control" id="editName" value="${escapeHtml(e.name)}" required
+                               oninput="scheduleBasicSave()">
                     </div>
                     <div class="row mb-3">
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label class="form-label">開始日</label>
-                            <input type="date" class="form-control" id="editStartDate" value="${e.start_date || ''}">
+                            <input type="date" class="form-control" id="editStartDate" value="${e.start_date || ''}"
+                                   onchange="scheduleBasicSave()">
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label class="form-label">終了日</label>
-                            <input type="date" class="form-control" id="editEndDate" value="${e.end_date || ''}">
+                            <input type="date" class="form-control" id="editEndDate" value="${e.end_date || ''}"
+                                   onchange="scheduleBasicSave()">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">申込期限</label>
+                            <input type="date" class="form-control" id="editDeadline" value="${e.deadline || ''}"
+                                   onchange="scheduleBasicSave()">
+                            <div class="form-text">空欄=期限なし</div>
                         </div>
                     </div>
                     <div class="row mb-3">
@@ -340,47 +568,74 @@ function renderBasicInfo(e) {
                             <label class="form-label">参加費</label>
                             <div class="input-group">
                                 <span class="input-group-text">¥</span>
-                                <input type="number" class="form-control" id="editParticipationFee" min="0" value="${e.participation_fee || 0}">
+                                <input type="number" class="form-control" id="editBaseFee" min="0" value="${e.base_fee || 0}"
+                                       onchange="scheduleBasicSave()">
                             </div>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">前泊費</label>
                             <div class="input-group">
                                 <span class="input-group-text">¥</span>
-                                <input type="number" class="form-control" id="editPreNightFee" min="0" value="${e.pre_night_fee || 0}">
+                                <input type="number" class="form-control" id="editPreNightFee" min="0" value="${e.pre_night_fee || 0}"
+                                       onchange="scheduleBasicSave()">
                             </div>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">昼食費</label>
                             <div class="input-group">
                                 <span class="input-group-text">¥</span>
-                                <input type="number" class="form-control" id="editLunchFee" min="0" value="${e.lunch_fee || 0}">
+                                <input type="number" class="form-control" id="editLunchFee" min="0" value="${e.lunch_fee || 0}"
+                                       onchange="scheduleBasicSave()">
                             </div>
                         </div>
                     </div>
-                    <button type="button" class="btn btn-primary" onclick="saveBasicInfo()">保存</button>
+                    <div class="row mb-3">
+                        <div class="col-12 mb-1"><label class="form-label fw-bold">定員（空欄=無制限）</label></div>
+                        <div class="col-md-6">
+                            <label class="form-label text-primary">男性定員</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="editCapacityMale" min="1"
+                                       value="${e.capacity_male !== null && e.capacity_male !== undefined ? e.capacity_male : ''}"
+                                       onchange="scheduleBasicSave()">
+                                <span class="input-group-text">人</span>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label text-danger">女性定員</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="editCapacityFemale" min="1"
+                                       value="${e.capacity_female !== null && e.capacity_female !== undefined ? e.capacity_female : ''}"
+                                       onchange="scheduleBasicSave()">
+                                <span class="input-group-text">人</span>
+                            </div>
+                        </div>
+                    </div>
                 </form>
             </div>
         </div>
     `;
 }
 
-async function saveBasicInfo() {
-    const name = document.getElementById('editName').value.trim();
-    if (!name) {
-        alert('イベント名を入力してください');
-        return;
-    }
+async function saveBasicInfo(auto = false) {
+    const name = document.getElementById('editName')?.value.trim();
+    if (!name) return; // イベント名未入力時はスキップ
+
+    const capMaleVal   = document.getElementById('editCapacityMale').value.trim();
+    const capFemaleVal = document.getElementById('editCapacityFemale').value.trim();
 
     const data = {
-        name:               name,
-        start_date:         document.getElementById('editStartDate').value || null,
-        end_date:           document.getElementById('editEndDate').value || null,
-        participation_fee:  parseInt(document.getElementById('editParticipationFee').value) || 0,
-        pre_night_fee:      parseInt(document.getElementById('editPreNightFee').value) || 0,
-        lunch_fee:          parseInt(document.getElementById('editLunchFee').value) || 0,
+        name:             name,
+        start_date:       document.getElementById('editStartDate').value || null,
+        end_date:         document.getElementById('editEndDate').value || null,
+        deadline:         document.getElementById('editDeadline').value || null,
+        base_fee:         parseInt(document.getElementById('editBaseFee').value) || 0,
+        pre_night_fee:    parseInt(document.getElementById('editPreNightFee').value) || 0,
+        lunch_fee:        parseInt(document.getElementById('editLunchFee').value) || 0,
+        capacity_male:    capMaleVal   !== '' ? parseInt(capMaleVal)   : null,
+        capacity_female:  capFemaleVal !== '' ? parseInt(capFemaleVal) : null,
     };
 
+    setBasicSaveStatus('saving');
     try {
         const res    = await fetch(`/api/expeditions/${expeditionId}`, {
             method:  'PUT',
@@ -389,13 +644,16 @@ async function saveBasicInfo() {
         });
         const result = await res.json();
         if (result.success) {
-            showToast('保存しました');
+            setBasicSaveStatus('saved');
             document.getElementById('expeditionTitle').textContent = name;
+            if (!auto) showToast('保存しました');
         } else {
-            alert(result.error?.message || '保存に失敗しました');
+            setBasicSaveStatus('error');
+            if (!auto) alert(result.error?.message || '保存に失敗しました');
         }
     } catch (err) {
-        alert('通信エラーが発生しました');
+        setBasicSaveStatus('error');
+        if (!auto) alert('通信エラーが発生しました');
     }
 }
 
@@ -413,6 +671,9 @@ async function loadParticipants() {
         if (data.success) {
             participantsCache = data.data || [];
             renderParticipants(participantsCache);
+            // エクスポートボタンのURLをセット
+            document.getElementById('btnExportXlsx').href = `/api/expeditions/${expeditionId}/export/xlsx`;
+            document.getElementById('btnExportPdf').href  = `/api/expeditions/${expeditionId}/export/pdf`;
         } else {
             document.getElementById('participantList').innerHTML = '<div class="alert alert-danger">読み込みに失敗しました</div>';
         }
@@ -420,6 +681,18 @@ async function loadParticipants() {
         console.error(err);
         document.getElementById('participantList').innerHTML = '<div class="alert alert-danger">通信エラーが発生しました</div>';
     }
+}
+
+function getGradeGenderLabel(grade, gender) {
+    if (grade === null && gender === null) return '';
+    if (grade === 0 || grade === '0') {
+        if (gender === 'male')   return 'OB';
+        if (gender === 'female') return 'OG';
+        return 'OB/OG';
+    }
+    const gradeStr  = grade  ? grade  : '';
+    const genderStr = gender === 'male' ? '男' : (gender === 'female' ? '女' : '');
+    return gradeStr + genderStr;
 }
 
 function renderParticipants(participants) {
@@ -430,9 +703,26 @@ function renderParticipants(participants) {
         return;
     }
 
-    const rows = participants.map(p => `
+    const confirmed  = participants.filter(p => p.status === 'confirmed');
+    const waitlisted = participants.filter(p => p.status === 'waitlisted');
+
+    const driverLabel = { driver: '<span class="badge bg-primary">ドライバー</span>', sub_driver: '<span class="badge bg-info text-dark">サブ</span>', none: '' };
+    const classLabel  = (v) => v == null ? '' : v == 0 ? '早出' : `${v}限後`;
+
+    const makeRows = (list) => list.map(p => {
+        const gradeGender  = getGradeGenderLabel(p.grade, p.gender);
+        const allergyHtml  = p.allergy
+            ? `<span class="text-danger" title="${escapeHtml(p.allergy)}">${escapeHtml(p.allergy.length > 20 ? p.allergy.slice(0, 20) + '…' : p.allergy)}</span>`
+            : '<span class="text-muted small">なし</span>';
+        const carHtml = p.is_joining_car == 0
+            ? '<span class="text-muted small">乗らない</span>'
+            : `${driverLabel[p.driver_type] || ''} <span class="text-muted small">${classLabel(p.friday_last_class)}</span>`;
+        return `
         <tr>
-            <td>${escapeHtml(p.name)}</td>
+            <td>${escapeHtml(p.name_kanji)}</td>
+            <td class="text-center small">${escapeHtml(gradeGender)}</td>
+            <td>${allergyHtml}</td>
+            <td class="text-center">${carHtml}</td>
             <td class="text-center">
                 <input type="checkbox" ${p.pre_night ? 'checked' : ''}
                     onchange="updateParticipant(${p.id}, 'pre_night', this.checked)">
@@ -442,37 +732,143 @@ function renderParticipants(participants) {
                     onchange="updateParticipant(${p.id}, 'lunch', this.checked)">
             </td>
             <td>
-                <button class="btn btn-outline-danger btn-sm" onclick="deleteParticipant(${p.id})">削除</button>
+                <div class="d-flex gap-1">
+                    ${p.status === 'waitlisted' ?
+                      `<button class="btn btn-outline-success btn-sm py-0" onclick="confirmParticipant(${p.id})">確定</button>` : ''}
+                    <button class="btn btn-outline-danger btn-sm py-0" onclick="deleteParticipant(${p.id})">削除</button>
+                </div>
             </td>
+        </tr>`;
+    }).join('');
+
+    const tableHtml = (rows, emptyMsg) => rows ? `<tbody>${rows}</tbody>` : `<tbody><tr><td colspan="8" class="text-muted">${emptyMsg}</td></tr></tbody>`;
+    const thead = (cls) => `<thead class="${cls}">
+        <tr>
+            <th>名前</th>
+            <th class="text-center">学年性別</th>
+            <th>アレルギー</th>
+            <th>車</th>
+            <th class="text-center">前泊</th>
+            <th class="text-center">昼食</th>
+            <th></th>
         </tr>
-    `).join('');
+    </thead>`;
 
     document.getElementById('participantList').innerHTML = `
-        <div class="table-responsive">
+        <div class="table-responsive mb-3">
+            <h6>確定参加者（${confirmed.length}人）</h6>
             <table class="table table-sm table-hover">
-                <thead class="table-light">
-                    <tr>
-                        <th>名前</th>
-                        <th class="text-center">前泊</th>
-                        <th class="text-center">昼食</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>${rows}</tbody>
+                ${thead('table-light')}
+                ${tableHtml(makeRows(confirmed), '確定参加者なし')}
             </table>
         </div>
+        ${waitlisted.length > 0 ? `
+        <div class="table-responsive">
+            <h6 class="text-warning"><i class="bi bi-clock"></i> キャンセル待ち（${waitlisted.length}人）</h6>
+            <table class="table table-sm table-hover">
+                ${thead('table-warning')}
+                ${tableHtml(makeRows(waitlisted), '')}
+            </table>
+        </div>
+        ` : ''}
     `;
+
+    // アレルギーまとめセクション
+    const allergyList = participants.filter(p => p.allergy);
+    const allergyEl   = document.getElementById('allergySummary');
+    if (allergyList.length > 0) {
+        allergyEl.innerHTML = `
+            <div class="card border-danger">
+                <div class="card-header bg-danger text-white py-2">
+                    <i class="bi bi-exclamation-triangle-fill"></i> アレルギーのある参加者（${allergyList.length}名）
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead class="table-light">
+                            <tr><th>名前</th><th>学年性別</th><th>アレルギー内容</th></tr>
+                        </thead>
+                        <tbody>
+                            ${allergyList.map(p => `
+                                <tr>
+                                    <td>${escapeHtml(p.name_kanji)}</td>
+                                    <td class="text-center small">${escapeHtml(getGradeGenderLabel(p.grade, p.gender))}</td>
+                                    <td class="text-danger">${escapeHtml(p.allergy)}</td>
+                                </tr>`).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>`;
+    } else {
+        allergyEl.innerHTML = '';
+    }
 }
 
+
+async function confirmParticipant(pid) {
+    await updateParticipant(pid, 'status', 'confirmed');
+}
+
+let memberSearchTimer = null;
+
 function showAddParticipantModal() {
+    document.getElementById('participantSearchInput').value = '';
+    document.getElementById('participantSearchResults').innerHTML = '';
     document.getElementById('newParticipantMemberId').value = '';
     addParticipantModal.show();
+}
+
+function searchMembers(query) {
+    clearTimeout(memberSearchTimer);
+    const resultsEl = document.getElementById('participantSearchResults');
+    document.getElementById('newParticipantMemberId').value = '';
+
+    if (!query.trim()) {
+        resultsEl.innerHTML = '';
+        return;
+    }
+
+    resultsEl.innerHTML = '<div class="text-muted small mt-1">検索中...</div>';
+
+    memberSearchTimer = setTimeout(async () => {
+        try {
+            const res  = await fetch(`/api/members?search=${encodeURIComponent(query.trim())}&per_page=20`);
+            const data = await res.json();
+            if (!data.success) { resultsEl.innerHTML = '<div class="text-danger small mt-1">取得に失敗しました</div>'; return; }
+
+            const existingIds = new Set(participantsCache.map(p => parseInt(p.member_id)));
+            const members = (data.data.members || []).filter(m => !existingIds.has(parseInt(m.id)));
+
+            if (members.length === 0) {
+                resultsEl.innerHTML = '<div class="text-muted small mt-1">該当する会員が見つかりません</div>';
+                return;
+            }
+
+            resultsEl.innerHTML = '<div class="list-group mt-1">' +
+                members.map(m => `
+                    <button type="button" class="list-group-item list-group-item-action py-2"
+                            onclick="selectParticipantMember(${m.id}, '${escapeHtml(m.name_kanji)}')">
+                        ${escapeHtml(m.name_kanji)}
+                        <span class="text-muted small ms-2">${escapeHtml(m.name_kana)}</span>
+                    </button>
+                `).join('') +
+            '</div>';
+        } catch (err) {
+            resultsEl.innerHTML = '<div class="text-danger small mt-1">取得に失敗しました</div>';
+        }
+    }, 300);
+}
+
+function selectParticipantMember(id, name) {
+    document.getElementById('newParticipantMemberId').value = id;
+    document.getElementById('participantSearchInput').value = name;
+    document.getElementById('participantSearchResults').innerHTML =
+        `<div class="alert alert-success py-1 mt-1 small">選択中: ${escapeHtml(name)}</div>`;
 }
 
 async function addParticipant() {
     const memberId = document.getElementById('newParticipantMemberId').value;
     if (!memberId) {
-        alert('会員IDを入力してください');
+        alert('会員を選択してください');
         return;
     }
 
@@ -538,6 +934,40 @@ async function deleteParticipant(pid) {
 // ==============================
 // タブ3: 車割
 // ==============================
+// 推奨下車駅キャッシュ: { member_id: { drop_station: "高田馬場"|..., nearest_station: "練馬"|... } | null }
+window._idealStations = null;
+
+async function resolveStations() {
+    const btn    = document.getElementById('resolveStationsBtn');
+    const status = document.getElementById('resolveStationsStatus');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    status.textContent = '住所を解析中...（数秒かかる場合があります）';
+
+    try {
+        const res    = await fetch(`/api/expeditions/${expeditionId}/cars/resolve-stations`, { method: 'POST' });
+        const result = await res.json();
+        if (result.success) {
+            window._idealStations = result.data || {};
+            // 車リストを再描画してバッジを反映
+            carsLoaded = false;
+            await loadCars();
+            const resolved = Object.values(window._idealStations).filter(v => v !== null).length;
+            const total    = Object.keys(window._idealStations).length;
+            status.textContent = `解析完了（${resolved}/${total}人）`;
+            btn.innerHTML = '<i class="bi bi-geo-fill"></i> 再解析';
+        } else {
+            status.textContent = '解析に失敗しました';
+            btn.innerHTML = '<i class="bi bi-geo-fill"></i> 解析';
+        }
+    } catch (err) {
+        status.textContent = '通信エラーが発生しました';
+        btn.innerHTML = '<i class="bi bi-geo-fill"></i> 解析';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
 async function loadCars() {
     if (carsLoaded) return;
     carsLoaded = true;
@@ -559,46 +989,77 @@ async function loadCars() {
         if (data.success) {
             renderCars(data.data || []);
         } else {
-            document.getElementById('carList').innerHTML = '<div class="alert alert-danger">読み込みに失敗しました</div>';
+            document.getElementById('carListOutbound').innerHTML = '<div class="alert alert-danger">読み込みに失敗しました</div>';
+            document.getElementById('carListReturn').innerHTML = '';
         }
     } catch (err) {
         console.error(err);
-        document.getElementById('carList').innerHTML = '<div class="alert alert-danger">通信エラーが発生しました</div>';
+        document.getElementById('carListOutbound').innerHTML = '<div class="alert alert-danger">通信エラーが発生しました</div>';
+        document.getElementById('carListReturn').innerHTML = '';
     }
 }
 
-function renderCars(cars) {
+function renderCarList(cars, tripType) {
+    const targetId = tripType === 'return' ? 'carListReturn' : 'carListOutbound';
     if (cars.length === 0) {
-        document.getElementById('carList').innerHTML = '<div class="alert alert-info">車がまだ登録されていません</div>';
+        document.getElementById(targetId).innerHTML = '<div class="alert alert-info">車がまだ登録されていません</div>';
         return;
     }
 
+    const roleLabel    = { driver: 'ドライバー', sub_driver: 'サブドライバー', passenger: '乗客' };
+    const stationColor = { '高田馬場': 'primary', '新宿': 'success', '渋谷': 'warning', '東京': 'danger' };
+
     const html = cars.map(car => {
+        const isReturn = car.trip_type === 'return';
+
         // 乗員リスト
-        const membersHtml = (car.members || []).map(m => `
+        const membersHtml = (car.car_members || []).map(m => {
+            // 3列目: 復路=推奨下車駅＋最寄り駅、往路/両路=時限
+            let col3;
+            if (isReturn) {
+                const stObj = window._idealStations?.[m.member_id];
+                if (stObj) {
+                    const dropBadge    = stObj.drop_station
+                        ? `<span class="badge bg-${stationColor[stObj.drop_station] || 'secondary'} me-1">${stObj.drop_station}</span>`
+                        : '';
+                    const nearestBadge = stObj.nearest_station
+                        ? `<span class="badge bg-light text-dark border">${escapeHtml(stObj.nearest_station)}</span>`
+                        : '';
+                    col3 = `<div class="d-flex flex-wrap gap-1 justify-content-center">${dropBadge}${nearestBadge}</div>`;
+                } else {
+                    col3 = '<span class="text-muted">―</span>';
+                }
+            } else {
+                col3 = m.friday_last_class == null ? '―'
+                     : m.friday_last_class == 0    ? '早出'
+                     : m.friday_last_class + '限';
+            }
+            return `
             <tr>
-                <td>${escapeHtml(m.name)}</td>
+                <td>${escapeHtml(m.name_kanji)}</td>
                 <td>
                     <select class="form-select form-select-sm" onchange="updateCarMember(${car.id}, ${m.id}, 'role', this.value)">
-                        <option value="passenger" ${m.role === 'passenger' ? 'selected' : ''}>乗客</option>
-                        <option value="driver"    ${m.role === 'driver'    ? 'selected' : ''}>ドライバー</option>
+                        <option value="driver"     ${m.role === 'driver'     ? 'selected' : ''}>ドライバー</option>
+                        <option value="sub_driver" ${m.role === 'sub_driver' ? 'selected' : ''}>サブドライバー</option>
+                        <option value="passenger"  ${m.role === 'passenger'  ? 'selected' : ''}>乗客</option>
                     </select>
                 </td>
+                <td class="text-center small text-muted">${col3}</td>
                 <td class="text-center">
-                    <input type="checkbox" ${m.exclude_settlement ? 'checked' : ''}
-                        onchange="updateCarMember(${car.id}, ${m.id}, 'exclude_settlement', this.checked)"
+                    <input type="checkbox" ${(m.is_excluded || m.exclude_settlement) ? 'checked' : ''}
+                        onchange="updateCarMember(${car.id}, ${m.id}, 'is_excluded', this.checked ? 1 : 0)"
                         title="清算対象外">
                 </td>
                 <td>
                     <button class="btn btn-outline-danger btn-sm py-0" onclick="deleteCarMember(${car.id}, ${m.id})">削除</button>
                 </td>
             </tr>
-        `).join('');
+        `; }).join('');
 
         // 立替者リスト
-        const payersHtml = (car.payers || []).map(p => `
+        const payersHtml = (car.car_payers || []).map(p => `
             <tr>
-                <td>${escapeHtml(p.name)}</td>
+                <td>${escapeHtml(p.name_kanji)}</td>
                 <td>¥${Number(p.amount).toLocaleString()}</td>
                 <td>
                     <button class="btn btn-outline-danger btn-sm py-0" onclick="deleteCarPayer(${car.id}, ${p.id})">削除</button>
@@ -606,10 +1067,17 @@ function renderCars(cars) {
             </tr>
         `).join('');
 
+        const depLabel  = (car.trip_type === 'outbound' && car.departure_class != null)
+            ? `<span class="badge bg-success ms-1">${car.departure_class == 0 ? '早出' : car.departure_class + '限後出発'}</span>`
+            : '';
+        const tripBadge = car.trip_type === 'outbound' ? '<span class="badge bg-primary ms-2">往路</span>' + depLabel
+                        : car.trip_type === 'return'   ? '<span class="badge bg-secondary ms-2">復路</span>'
+                        : '';
+
         return `
             <div class="card mb-3">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <strong>${escapeHtml(car.name)}</strong>
+                    <span><strong>${escapeHtml(car.name)}</strong>${tripBadge}</span>
                     <button class="btn btn-outline-danger btn-sm" onclick="deleteCar(${car.id})">車を削除</button>
                 </div>
                 <div class="card-body">
@@ -626,11 +1094,12 @@ function renderCars(cars) {
                                 <tr>
                                     <th>名前</th>
                                     <th>役割</th>
+                                    <th class="text-center">${isReturn ? '推奨下車駅 / 最寄り駅' : '時限'}</th>
                                     <th class="text-center" title="清算対象外">対象外</th>
                                     <th></th>
                                 </tr>
                             </thead>
-                            <tbody>${membersHtml || '<tr><td colspan="4" class="text-muted">乗員なし</td></tr>'}</tbody>
+                            <tbody>${membersHtml || '<tr><td colspan="5" class="text-muted">乗員なし</td></tr>'}</tbody>
                         </table>
                     </div>
                     <button class="btn btn-outline-primary btn-sm mb-3" onclick="showAddCarMemberModal(${car.id})">+ 乗員を追加</button>
@@ -654,14 +1123,25 @@ function renderCars(cars) {
         `;
     }).join('');
 
-    document.getElementById('carList').innerHTML = html;
+    document.getElementById(targetId).innerHTML = html;
 }
 
-function showAddCarModal() {
+function renderCars(cars) {
+    carsCache = cars; // 重複チェック用にキャッシュ
+    const outbound = cars.filter(c => c.trip_type !== 'return');
+    const returning = cars.filter(c => c.trip_type === 'return');
+    renderCarList(outbound,  'outbound');
+    renderCarList(returning, 'return');
+}
+
+function showAddCarModal(tripType = 'both') {
     document.getElementById('newCarName').value        = '';
     document.getElementById('newCarCapacity').value    = '5';
     document.getElementById('newCarRentalFee').value   = '0';
     document.getElementById('newCarHighwayFee').value  = '0';
+    document.getElementById('newCarTripType').value    = tripType;
+    document.getElementById('newCarDepartureClass').value = '6';
+    document.getElementById('departureClassField').style.display = (tripType === 'outbound') ? 'block' : 'none';
     addCarModal.show();
 }
 
@@ -672,11 +1152,16 @@ async function addCar() {
         return;
     }
 
+    const tripType = document.getElementById('newCarTripType').value || 'both';
     const data = {
-        name:        name,
-        capacity:    parseInt(document.getElementById('newCarCapacity').value)   || 5,
-        rental_fee:  parseInt(document.getElementById('newCarRentalFee').value)  || 0,
-        highway_fee: parseInt(document.getElementById('newCarHighwayFee').value) || 0,
+        name:            name,
+        capacity:        parseInt(document.getElementById('newCarCapacity').value)   || 5,
+        rental_fee:      parseInt(document.getElementById('newCarRentalFee').value)  || 0,
+        highway_fee:     parseInt(document.getElementById('newCarHighwayFee').value) || 0,
+        trip_type:       tripType,
+        departure_class: tripType === 'outbound'
+            ? parseInt(document.getElementById('newCarDepartureClass').value, 10)
+            : null,
     };
 
     try {
@@ -699,6 +1184,263 @@ async function addCar() {
     }
 }
 
+async function autoAssignOutboundCars() {
+    // 参加者一覧から can_book_car=1 の人を取得してモーダルに表示
+    try {
+        const res  = await fetch(`/api/expeditions/${expeditionId}/participants`);
+        const data = await res.json();
+        if (!data.success) { alert('参加者の取得に失敗しました'); return; }
+
+        const bookers = (data.data || []).filter(p => parseInt(p.is_joining_car) === 1 && parseInt(p.can_book_car) === 1);
+        if (bookers.length === 0) {
+            alert('車を予約できる人が登録されていません。\n申し込み時に「車の予約をする」を選択した参加者が必要です。');
+            return;
+        }
+
+        const classLabel = (v) => v == null ? '不明' : v == 0 ? '早出' : `${v}限後出発`;
+        const rows = bookers.map(b => `
+            <tr>
+                <td>${escapeHtml(b.name_kanji)}</td>
+                <td><span class="badge bg-success">${classLabel(b.friday_last_class)}</span></td>
+                <td>
+                    <div class="input-group input-group-sm" style="width:110px;">
+                        <input type="number" class="form-control" id="bookerCap_${b.member_id}"
+                               value="5" min="1" max="20">
+                        <span class="input-group-text">人</span>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+
+        document.getElementById('autoAssignBookerList').innerHTML = `
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead class="table-light">
+                        <tr>
+                            <th>車を借りる人</th>
+                            <th>出発時限</th>
+                            <th>定員</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+            <div class="alert alert-info py-2 small mb-0">
+                <i class="bi bi-info-circle"></i>
+                既存の往路の車はすべて削除され、上記の車に置き換わります
+            </div>
+        `;
+        window._autoAssignBookers = bookers;
+        carAutoAssignModal.show();
+    } catch (err) {
+        alert('通信エラーが発生しました');
+    }
+}
+
+async function executeCarAutoAssign() {
+    const bookers    = window._autoAssignBookers || [];
+    const capacities = {};
+    for (const b of bookers) {
+        capacities[b.member_id] = parseInt(document.getElementById(`bookerCap_${b.member_id}`).value, 10) || 5;
+    }
+
+    // 定員合計チェック
+    const totalCapacity  = Object.values(capacities).reduce((s, v) => s + v, 0);
+    const joiningCount   = (participantsCache || []).filter(p => parseInt(p.is_joining_car) === 1).length;
+    if (joiningCount > 0 && totalCapacity < joiningCount) {
+        const ok = confirm(
+            `定員合計（${totalCapacity}人）が乗車予定人数（${joiningCount}人）より少ないです。\n` +
+            `${joiningCount - totalCapacity}人が最後の車に溢れる可能性があります。\n\nこのまま実行しますか？`
+        );
+        if (!ok) { carAutoAssignModal.show(); return; }
+    }
+
+    carAutoAssignModal.hide();
+
+    try {
+        const res    = await fetch(`/api/expeditions/${expeditionId}/cars/auto-assign`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ capacities }),
+        });
+        const result = await res.json();
+        if (result.success) {
+            carsLoaded = false;
+            await loadCars();
+            const warnings = result.data?.warnings || [];
+            if (warnings.length > 0) {
+                showToast('往路を自動作成しました（警告あり）', 'warning');
+                alert('【警告】\n' + warnings.join('\n'));
+            } else {
+                showToast('往路を自動作成しました');
+            }
+        } else {
+            alert(result.error?.message || '自動作成に失敗しました');
+        }
+    } catch (err) {
+        alert('通信エラーが発生しました');
+    }
+}
+
+async function showAutoAssignReturnModal() {
+    document.getElementById('autoAssignReturnDriverList').innerHTML = '読み込み中...';
+    autoAssignReturnModal.show();
+
+    try {
+        const res  = await fetch(`/api/expeditions/${expeditionId}/participants`);
+        const data = await res.json();
+        if (!data.success) {
+            document.getElementById('autoAssignReturnDriverList').innerHTML =
+                '<div class="alert alert-danger small">参加者の取得に失敗しました</div>';
+            return;
+        }
+
+        const drivers = (data.data || []).filter(p => parseInt(p.is_joining_car) === 1 && parseInt(p.can_book_car) === 1);
+        if (drivers.length === 0) {
+            document.getElementById('autoAssignReturnDriverList').innerHTML =
+                '<div class="alert alert-warning small">車を予約できる人が登録されていません。<br>申し込み時に「車の予約をする」を選択した参加者が必要です。</div>';
+            document.getElementById('autoAssignReturnExecBtn').disabled = true;
+            return;
+        }
+
+        document.getElementById('autoAssignReturnExecBtn').disabled = false;
+        window._autoAssignReturnDrivers = drivers;
+        window._autoAssignReturnStations = null;
+
+        // モードに応じてテーブルを描画（stationMap=null は解析中）
+        const makeRows = (stationMap, showStation) => drivers.map(d => {
+            // stationMap の値は { drop_station, nearest_station } | null
+            const stObj       = stationMap?.[d.member_id];
+            const autoStation = stObj?.drop_station || '';
+            const stations = ['高田馬場', '新宿', '渋谷', '東京'];
+            const options = stations.map(s =>
+                `<option value="${s}" ${autoStation === s ? 'selected' : ''}>${s}</option>`
+            ).join('');
+            const stationCell = showStation ? `
+                <td>
+                    <select class="form-select form-select-sm" id="returnStation_${d.member_id}" style="width:110px;">
+                        ${options}
+                    </select>
+                    ${stationMap === null ? `<span class="text-muted" style="font-size:.75em;">解析中...</span>` : ''}
+                </td>` : `<td style="display:none;"><input type="hidden" id="returnStation_${d.member_id}" value=""></td>`;
+            return `
+            <tr>
+                <td>${escapeHtml(d.name_kanji)}</td>
+                ${stationCell}
+                <td>
+                    <div class="input-group input-group-sm" style="width:100px;">
+                        <input type="number" class="form-control" id="returnCap_${d.member_id}"
+                               value="5" min="1" max="20">
+                        <span class="input-group-text">人</span>
+                    </div>
+                </td>
+            </tr>`;
+        }).join('');
+
+        const renderTable = (stationMap) => {
+            const mode = document.querySelector('input[name="returnAssignMode"]:checked')?.value || 'by_station';
+            const showStation = mode === 'by_station';
+            const stationHeader = showStation ? '<th>下車駅（自動判定・変更可）</th>' : '';
+            document.getElementById('autoAssignReturnDriverList').innerHTML = `
+                <div class="table-responsive mb-3">
+                    <table class="table table-sm">
+                        <thead class="table-light">
+                            <tr><th>車を借りる人</th>${stationHeader}<th>定員</th></tr>
+                        </thead>
+                        <tbody>${makeRows(stationMap, showStation)}</tbody>
+                    </table>
+                </div>`;
+        };
+
+        // モード切替時に再描画
+        document.querySelectorAll('input[name="returnAssignMode"]').forEach(radio => {
+            radio.addEventListener('change', () => renderTable(window._autoAssignReturnStations ?? null));
+        });
+
+        renderTable(null); // まず空で描画
+
+        // 住所から駅を自動判定して初期値をセット（by_station 用）
+        try {
+            const sRes = await fetch(`/api/expeditions/${expeditionId}/cars/resolve-stations`, { method: 'POST' });
+            const sData = await sRes.json();
+            if (sData.success) {
+                const driverIds = new Set(drivers.map(d => String(d.member_id)));
+                window._autoAssignReturnStations = Object.fromEntries(
+                    Object.entries(sData.data || {}).filter(([id]) => driverIds.has(id))
+                );
+                renderTable(window._autoAssignReturnStations);
+            }
+        } catch (_) { /* 解析失敗しても続行 */ }
+
+    } catch (err) {
+        document.getElementById('autoAssignReturnDriverList').innerHTML =
+            '<div class="alert alert-danger small">通信エラーが発生しました</div>';
+    }
+}
+
+async function autoAssignReturnCars() {
+    const drivers = window._autoAssignReturnDrivers || [];
+    const capacities        = {};
+    const preferredStations = {};
+    for (const d of drivers) {
+        capacities[d.member_id] = parseInt(document.getElementById(`returnCap_${d.member_id}`)?.value, 10) || 5;
+        const station = document.getElementById(`returnStation_${d.member_id}`)?.value || '';
+        if (station) preferredStations[d.member_id] = station;
+    }
+
+    // 定員合計チェック
+    const totalCapacity = Object.values(capacities).reduce((s, v) => s + v, 0);
+    const joiningCount  = (participantsCache || []).filter(p => parseInt(p.is_joining_car) === 1).length;
+    if (joiningCount > 0 && totalCapacity < joiningCount) {
+        const ok = confirm(
+            `定員合計（${totalCapacity}人）が乗車予定人数（${joiningCount}人）より少ないです。\n` +
+            `${joiningCount - totalCapacity}人が最後の車に溢れる可能性があります。\n\nこのまま実行しますか？`
+        );
+        if (!ok) return;
+    }
+
+    const mode = document.querySelector('input[name="returnAssignMode"]:checked')?.value || 'by_station';
+    autoAssignReturnModal.hide();
+
+    const btn = document.getElementById('autoAssignReturnExecBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 処理中...';
+
+    try {
+        const res    = await fetch(`/api/expeditions/${expeditionId}/cars/auto-assign-return`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ mode, capacities, preferred_stations: preferredStations }),
+        });
+        const result = await res.json();
+        if (result.success) {
+            // 推奨下車駅を解析してから車リストを描画
+            carsLoaded = false;
+            window._idealStations = null;
+            try {
+                await resolveStations(); // 成功すれば内部で loadCars() まで呼ぶ
+            } catch (_) {
+                await loadCars(); // 解析失敗でも車リストは必ず更新
+            }
+            document.querySelector('[href="#carTabReturn"]')?.click();
+            const warnings = result.data?.warnings || [];
+            if (warnings.length > 0) {
+                showToast('復路を自動作成しました（警告あり）', 'warning');
+                alert('【警告】\n' + warnings.join('\n'));
+            } else {
+                showToast('復路を自動作成しました');
+            }
+        } else {
+            alert(result.error?.message || '自動作成に失敗しました');
+        }
+    } catch (err) {
+        alert('通信エラーが発生しました');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-play-fill"></i> 実行';
+    }
+}
+
 async function deleteCar(cid) {
     if (!confirm('この車を削除しますか？')) return;
 
@@ -717,12 +1459,23 @@ async function deleteCar(cid) {
     }
 }
 
+// 車データキャッシュ（重複チェック用）
+let carsCache = [];
+
 function showAddCarMemberModal(cid) {
     currentCarId = cid;
-    // 参加者リストをセレクトに反映
+    // 既にいずれかの車に乗っている member_id を収集
+    const assignedIds = new Set(
+        carsCache.flatMap(c => (c.car_members || []).map(m => parseInt(m.member_id)))
+    );
     const sel = document.getElementById('carMemberSelect');
-    sel.innerHTML = participantsCache.map(p =>
-        `<option value="${p.id}">${escapeHtml(p.name)}</option>`
+    const options = participantsCache.filter(p => !assignedIds.has(parseInt(p.member_id)));
+    if (options.length === 0) {
+        alert('全ての参加者がすでにいずれかの車に割り当て済みです');
+        return;
+    }
+    sel.innerHTML = options.map(p =>
+        `<option value="${p.member_id}">${escapeHtml(p.name_kanji)}</option>`
     ).join('');
     document.getElementById('carMemberRole').value = 'passenger';
     addCarMemberModal.show();
@@ -737,7 +1490,7 @@ async function addCarMember() {
         const res    = await fetch(`/api/expeditions/${expeditionId}/cars/${currentCarId}/members`, {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ participant_id: parseInt(pid), role }),
+            body:    JSON.stringify({ member_id: parseInt(pid), role }),
         });
         const result = await res.json();
         if (result.success) {
@@ -795,7 +1548,7 @@ function showAddCarPayerModal(cid) {
     currentCarId = cid;
     const sel = document.getElementById('carPayerSelect');
     sel.innerHTML = participantsCache.map(p =>
-        `<option value="${p.id}">${escapeHtml(p.name)}</option>`
+        `<option value="${p.member_id}">${escapeHtml(p.name_kanji)}</option>`
     ).join('');
     document.getElementById('carPayerAmount').value = '0';
     addCarPayerModal.show();
@@ -810,7 +1563,7 @@ async function addCarPayer() {
         const res    = await fetch(`/api/expeditions/${expeditionId}/cars/${currentCarId}/payers`, {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ participant_id: parseInt(pid), amount }),
+            body:    JSON.stringify({ member_id: parseInt(pid), amount }),
         });
         const result = await res.json();
         if (result.success) {
@@ -870,7 +1623,7 @@ function renderSettlement(settlement) {
         const badge  = amount >= 0
             ? `<span class="badge bg-danger">支払い ¥${Number(amount).toLocaleString()}</span>`
             : `<span class="badge bg-success">返金 ¥${Number(-amount).toLocaleString()}</span>`;
-        return `<tr><td>${escapeHtml(d.name)}</td><td>${badge}</td></tr>`;
+        return `<tr><td>${escapeHtml(d.name_kanji)}</td><td>${badge}</td></tr>`;
     }).join('');
 
     el.innerHTML = `
@@ -916,83 +1669,146 @@ async function loadTeams() {
     }
 }
 
-function renderTeams(teamsData) {
-    const board = document.getElementById('teamBoard');
+/**
+ * チームメンバーをOB/OG→4年→3年→2年→1年の順にソートする
+ * OB/OG（grade=0）は入学年昇順（古い=先輩が先）
+ */
+function sortTeamMembers(members) {
+    return [...members].sort((a, b) => {
+        const ga = parseInt(a.grade) || 0;
+        const gb = parseInt(b.grade) || 0;
+        // OB/OG=0を先頭、現役は学年降順（4>3>2>1）
+        const rankA = ga === 0 ? -1 : (5 - ga);
+        const rankB = gb === 0 ? -1 : (5 - gb);
+        if (rankA !== rankB) return rankA - rankB;
+        // OB/OG同士は入学年昇順（古い先輩が先）
+        if (ga === 0) {
+            return (parseInt(a.enrollment_year) || 9999) - (parseInt(b.enrollment_year) || 9999);
+        }
+        return 0;
+    });
+}
 
-    // 未割り当てエリア + 各チームエリアをカードで横並び
+function renderTeams(teamsData) {
+    const board      = document.getElementById('teamBoard');
     const unassigned = teamsData.unassigned || [];
     const teams      = teamsData.teams      || [];
+
+    // チーム選択肢（未割り当てメンバーの行で使用）
+    const teamOptions = teams.map(t =>
+        `<option value="${t.id}">${escapeHtml(t.name)}</option>`
+    ).join('');
 
     let html = '';
 
     // 未割り当てカード
     html += `
-        <div class="card" style="min-width:200px;">
-            <div class="card-header fw-bold">未割り当て</div>
-            <ul class="list-group list-group-flush sortable-team" id="team-unassigned" data-team-id="">
-                ${unassigned.map(p => `
-                    <li class="list-group-item py-1 px-2" data-participant-id="${p.id}">${escapeHtml(p.name)}</li>
-                `).join('')}
-            </ul>
-        </div>
-    `;
+        <div class="card" style="min-width:240px; max-width:320px;">
+            <div class="card-header fw-bold">未割り当て（${unassigned.length}人）</div>
+            <ul class="list-group list-group-flush" id="team-unassigned">`;
+
+    if (unassigned.length === 0) {
+        html += `<li class="list-group-item text-muted py-2 px-2">全員割り当て済み</li>`;
+    } else {
+        unassigned.forEach(p => {
+            html += `
+                <li class="list-group-item py-2 px-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="flex-grow-1">${escapeHtml(p.name_kanji)}</span>
+                        ${teams.length > 0 ? `
+                        <select class="form-select form-select-sm" style="width:auto;" id="team-select-${p.member_id}">
+                            ${teamOptions}
+                        </select>
+                        <button class="btn btn-sm btn-primary" onclick="assignToTeam(${p.member_id})">追加</button>
+                        ` : '<span class="text-muted small">チームなし</span>'}
+                    </div>
+                </li>`;
+        });
+    }
+
+    html += `</ul></div>`;
 
     // 各チームカード
     teams.forEach(team => {
         html += `
-            <div class="card" style="min-width:200px;">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span class="team-name" onclick="startEditTeamName(${team.id}, this)"
-                          style="cursor:pointer;" title="クリックで編集">${escapeHtml(team.name)}</span>
+            <div class="card" style="min-width:200px; max-width:280px;">
+                <div class="card-header d-flex justify-content-between align-items-center gap-1">
+                    <span class="team-name fw-bold flex-grow-1" id="team-name-${team.id}">${escapeHtml(team.name)}</span>
+                    <small class="text-muted text-nowrap">${(team.members || []).length}人</small>
+                    <button class="btn btn-sm btn-outline-secondary py-0 px-1" title="チーム名を編集"
+                            onclick="startEditTeamName(${team.id})">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger py-0 px-1" title="チームを削除"
+                            onclick="deleteTeam(${team.id})">
+                        <i class="bi bi-trash"></i>
+                    </button>
                 </div>
-                <ul class="list-group list-group-flush sortable-team" id="team-${team.id}" data-team-id="${team.id}">
-                    ${(team.participants || []).map(p => `
-                        <li class="list-group-item py-1 px-2" data-participant-id="${p.id}">${escapeHtml(p.name)}</li>
-                    `).join('')}
-                </ul>
-            </div>
-        `;
+                <ul class="list-group list-group-flush">`;
+
+        if ((team.members || []).length === 0) {
+            html += `<li class="list-group-item text-muted py-2 px-2">メンバーなし</li>`;
+        } else {
+            sortTeamMembers(team.members || []).forEach(m => {
+                html += `
+                    <li class="list-group-item py-1 px-2 d-flex justify-content-between align-items-center">
+                        <span>${escapeHtml(m.name_kanji)}</span>
+                        <button class="btn btn-sm btn-outline-danger py-0" onclick="removeFromTeamWithIds(${team.id}, ${m.id})">外す</button>
+                    </li>`;
+            });
+        }
+
+        html += `</ul></div>`;
     });
 
     board.innerHTML = html;
-
-    // SortableJS で各エリアをD&D有効化
-    document.querySelectorAll('.sortable-team').forEach(el => {
-        Sortable.create(el, {
-            group:     'teams',
-            animation: 150,
-            onEnd:     saveTeamOrder,
-        });
-    });
 }
 
-// D&D完了時に並び順をAPIへ送信
-async function saveTeamOrder() {
-    const order = [];
-
-    document.querySelectorAll('.sortable-team').forEach(el => {
-        const teamId = el.dataset.teamId || null;
-        el.querySelectorAll('li[data-participant-id]').forEach(li => {
-            order.push({
-                participant_id: parseInt(li.dataset.participantId),
-                team_id:        teamId ? parseInt(teamId) : null,
-            });
-        });
-    });
+// 未割り当てメンバーをチームに追加
+async function assignToTeam(memberMemberId) {
+    const select = document.getElementById(`team-select-${memberMemberId}`);
+    if (!select) return;
+    const teamId = parseInt(select.value);
+    if (!teamId) return;
 
     try {
-        const res    = await fetch(`/api/expeditions/${expeditionId}/teams/order`, {
-            method:  'PUT',
+        const res    = await fetch(`/api/expeditions/${expeditionId}/teams/${teamId}/members`, {
+            method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ order }),
+            body:    JSON.stringify({ member_id: memberMemberId }),
         });
         const result = await res.json();
         if (!result.success) {
-            console.error('並び順の保存に失敗:', result.error?.message);
+            alert('追加に失敗しました: ' + (result.error?.message || ''));
+            return;
         }
     } catch (err) {
-        console.error('並び順保存エラー:', err);
+        console.error(err);
+        alert('通信エラーが発生しました');
+        return;
     }
+    teamsLoaded = false;
+    await loadTeams();
+}
+
+// チームメンバーを外す（teamId: チームID、teamMemberId: expedition_team_members.id）
+async function removeFromTeamWithIds(teamId, teamMemberId) {
+    try {
+        const res    = await fetch(`/api/expeditions/${expeditionId}/teams/${teamId}/members/${teamMemberId}`, {
+            method: 'DELETE',
+        });
+        const result = await res.json();
+        if (!result.success) {
+            alert('削除に失敗しました: ' + (result.error?.message || ''));
+            return;
+        }
+    } catch (err) {
+        console.error(err);
+        alert('通信エラーが発生しました');
+        return;
+    }
+    teamsLoaded = false;
+    await loadTeams();
 }
 
 function showAddTeamModal() {
@@ -1025,20 +1841,40 @@ async function addTeam() {
 }
 
 // チーム名のインライン編集
-function startEditTeamName(teamId, el) {
-    const currentName = el.textContent.trim();
-    el.innerHTML = `
-        <input type="text" class="form-control form-control-sm" value="${escapeHtml(currentName)}"
-               onblur="saveTeamName(${teamId}, this)"
-               onkeydown="if(event.key==='Enter') this.blur(); if(event.key==='Escape') cancelTeamName(${teamId}, this, '${escapeHtml(currentName)}')">
-    `;
-    el.querySelector('input').focus();
+function startEditTeamName(teamId) {
+    const span = document.getElementById(`team-name-${teamId}`);
+    if (!span || span.querySelector('input')) return; // 既に編集中なら無視
+
+    const currentName = span.textContent.trim();
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'form-control form-control-sm';
+    input.value = currentName;
+    input.dataset.original = currentName;
+
+    input.addEventListener('blur', () => saveTeamName(teamId, input));
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+        if (e.key === 'Escape') { cancelTeamName(teamId, input); }
+    });
+
+    span.textContent = '';
+    span.appendChild(input);
+    input.focus();
+    input.select();
 }
 
 async function saveTeamName(teamId, input) {
-    const name = input.value.trim();
+    const name     = input.value.trim();
+    const original = input.dataset.original || '';
+
     if (!name) {
-        input.value = input.dataset.original || '';
+        cancelTeamName(teamId, input);
+        return;
+    }
+    if (name === original) {
+        cancelTeamName(teamId, input);
         return;
     }
 
@@ -1050,23 +1886,187 @@ async function saveTeamName(teamId, input) {
         });
         const result = await res.json();
         if (result.success) {
-            // インプットをテキストに戻す
-            const span = input.parentElement;
-            span.innerHTML = escapeHtml(name);
-            span.onclick = () => startEditTeamName(teamId, span);
+            const span = document.getElementById(`team-name-${teamId}`);
+            if (span) span.textContent = name;
             showToast('チーム名を更新しました', 'success', 1500);
         } else {
             alert(result.error?.message || '更新に失敗しました');
+            cancelTeamName(teamId, input);
+        }
+    } catch (err) {
+        alert('通信エラーが発生しました');
+        cancelTeamName(teamId, input);
+    }
+}
+
+function cancelTeamName(teamId, input) {
+    const span = document.getElementById(`team-name-${teamId}`);
+    if (span) span.textContent = input.dataset.original || '';
+}
+
+// チーム削除
+async function deleteTeam(teamId) {
+    if (!confirm('このチームを削除しますか？\nメンバーは未割り当てに戻ります。')) return;
+
+    try {
+        const res    = await fetch(`/api/expeditions/${expeditionId}/teams/${teamId}`, { method: 'DELETE' });
+        const result = await res.json();
+        if (result.success) {
+            teamsLoaded = false;
+            await loadTeams();
+            showToast('チームを削除しました');
+        } else {
+            alert(result.error?.message || '削除に失敗しました');
         }
     } catch (err) {
         alert('通信エラーが発生しました');
     }
 }
 
-function cancelTeamName(teamId, input, original) {
-    const span = input.parentElement;
-    span.innerHTML = original;
-    span.onclick = () => startEditTeamName(teamId, span);
+// 自動割り当てモーダルを表示
+let autoAssignData = null; // プレビュー用データキャッシュ
+
+async function showAutoAssignModal() {
+    autoAssignData = null;
+    document.getElementById('autoAssignPreview').innerHTML = '読み込み中...';
+    document.getElementById('autoAssignExecBtn').disabled = true;
+    autoAssignModal.show();
+
+    try {
+        const res  = await fetch(`/api/expeditions/${expeditionId}/teams`);
+        const data = await res.json();
+        if (!data.success) throw new Error('読み込み失敗');
+
+        const unassigned = data.data.unassigned || [];
+        const teams      = data.data.teams      || [];
+
+        if (teams.length === 0) {
+            document.getElementById('autoAssignPreview').innerHTML =
+                '<div class="alert alert-warning">先にチームを作成してください。</div>';
+            return;
+        }
+        if (unassigned.length === 0) {
+            document.getElementById('autoAssignPreview').innerHTML =
+                '<div class="alert alert-info">未割り当ての参加者がいません。</div>';
+            return;
+        }
+
+        // 性別で分類（DBは 'male'/'female'）
+        const males   = unassigned.filter(p => p.gender === 'male');
+        const females = unassigned.filter(p => p.gender === 'female');
+        const others  = unassigned.filter(p => p.gender !== 'male' && p.gender !== 'female');
+
+        // 割り当てプレビューを計算（男女・学年バランス考慮）
+        const assignments = buildAssignments(males, females, others, teams);
+        autoAssignData = { assignments };
+
+        // プレビューHTML生成
+        const preview = {};
+        teams.forEach(t => { preview[t.id] = { name: t.name, males: [], females: [], others: [] }; });
+        assignments.forEach(a => {
+            const p = unassigned.find(u => u.member_id == a.member_id);
+            if (!p) return;
+            const g = p.gender === 'male' ? 'males' : p.gender === 'female' ? 'females' : 'others';
+            preview[a.teamId][g].push(p.name_kanji);
+        });
+
+        let html = `
+            <p class="small text-muted mb-2">
+                未割り当て: 男性 ${males.length}人 / 女性 ${females.length}人
+                ${others.length > 0 ? ` / その他 ${others.length}人` : ''}
+            </p>
+            <div class="table-responsive">
+            <table class="table table-sm table-bordered">
+                <thead class="table-light">
+                    <tr><th>チーム</th><th>男性</th><th>女性</th>${others.length > 0 ? '<th>その他</th>' : ''}</tr>
+                </thead>
+                <tbody>`;
+        teams.forEach(t => {
+            const p = preview[t.id];
+            html += `<tr>
+                <td><strong>${escapeHtml(p.name)}</strong></td>
+                <td>${p.males.length > 0 ? escapeHtml(p.males.join('、')) + `<span class="badge bg-primary ms-1">${p.males.length}</span>` : '<span class="text-muted">なし</span>'}</td>
+                <td>${p.females.length > 0 ? escapeHtml(p.females.join('、')) + `<span class="badge bg-danger ms-1">${p.females.length}</span>` : '<span class="text-muted">なし</span>'}</td>
+                ${others.length > 0 ? `<td>${p.others.length > 0 ? escapeHtml(p.others.join('、')) : '<span class="text-muted">なし</span>'}</td>` : ''}
+            </tr>`;
+        });
+        html += '</tbody></table></div>';
+
+        document.getElementById('autoAssignPreview').innerHTML = html;
+        document.getElementById('autoAssignExecBtn').disabled = false;
+
+    } catch (err) {
+        document.getElementById('autoAssignPreview').innerHTML =
+            '<div class="alert alert-danger">読み込みに失敗しました</div>';
+    }
+}
+
+/**
+ * 男女・学年バランスを考慮してチーム割り当てを計算する
+ *
+ * 方針:
+ *   - 男女それぞれ独立してチームに均等分配（各チーム約3人ずつ、余れば一部4人）
+ *   - 学年が均等になるようスネークドラフトで順番を決める
+ *     例: 3チーム → 1巡目 t0,t1,t2 / 2巡目 t2,t1,t0 / 3巡目 t0,t1,t2 ...
+ *   - 男女で独立してt[0]から割り当てるので、各チームが「男約3人+女約3人」になる
+ */
+function buildAssignments(males, females, others, teams) {
+    const n = teams.length;
+    if (n === 0) return [];
+
+    // 学年でソート（0=OB/OGは最後尾）
+    const byGrade = arr => [...arr].sort((a, b) => {
+        const ga = parseInt(a.grade) || 99;
+        const gb = parseInt(b.grade) || 99;
+        return ga - gb;
+    });
+
+    // スネークドラフト: 偶数ラウンドは左→右、奇数ラウンドは右→左
+    const snakeAssign = (group) => {
+        const sorted = byGrade(group);
+        return sorted.map((p, i) => {
+            const round      = Math.floor(i / n);
+            const posInRound = i % n;
+            const teamIdx    = round % 2 === 0 ? posInRound : (n - 1 - posInRound);
+            return { member_id: p.member_id, teamId: teams[teamIdx].id };
+        });
+    };
+
+    return [
+        ...snakeAssign(males),
+        ...snakeAssign(females),
+        ...snakeAssign(others),
+    ];
+}
+
+// 自動割り当てを実行
+async function executeAutoAssign() {
+    if (!autoAssignData) return;
+    const btn = document.getElementById('autoAssignExecBtn');
+    btn.disabled = true;
+    btn.textContent = '割り当て中...';
+
+    try {
+        for (const a of autoAssignData.assignments) {
+            const res = await fetch(`/api/expeditions/${expeditionId}/teams/${a.teamId}/members`, {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ member_id: a.member_id }),
+            });
+            const result = await res.json();
+            if (!result.success) {
+                throw new Error(result.error?.message || '割り当てエラー');
+            }
+        }
+        autoAssignModal.hide();
+        teamsLoaded = false;
+        await loadTeams();
+        showToast('自動割り当てが完了しました');
+    } catch (err) {
+        alert('割り当て中にエラーが発生しました: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-shuffle"></i> 割り当て実行';
+    }
 }
 
 // ==============================
@@ -1211,58 +2211,94 @@ async function loadCollection() {
 function renderCollection(data) {
     const content = document.getElementById('collectionContent');
 
+    // APIは配列 [{id, round, deadline, items:[...]}, ...] で返す
+    const findCollection = (roundNum) => (Array.isArray(data) ? data : [])
+        .find(c => Number(c.round) === roundNum) || null;
+
     // 第1回・第2回をアコーディオン形式で表示
-    const rounds = [
-        { id: 1, label: '第1回集金（遠征前）',  items: data.round1 || [] },
-        { id: 2, label: '第2回集金（遠征後）', items: data.round2 || [] },
+    const roundDefs = [
+        { id: 1, label: '第1回集金（遠征前）' },
+        { id: 2, label: '第2回集金（遠征後）' },
     ];
 
-    let accordionHtml = rounds.map(round => {
-        const tableRows = round.items.map(item => {
+    let accordionHtml = roundDefs.map(roundDef => {
+        const col   = findCollection(roundDef.id);
+        const items = col?.items || [];
+        const colId = col?.id || null;
+        const deadline = col?.deadline || '';
+
+        const submittedCount = items.filter(i => i.submitted == 1).length;
+        const paidCount      = items.filter(i => i.paid == 1).length;
+
+        const tableRows = items.map(item => {
             const amountDisplay = item.amount < 0
                 ? `<span class="text-success">返金 ¥${Number(-item.amount).toLocaleString()}</span>`
                 : `¥${Number(item.amount).toLocaleString()}`;
+            const submittedBadge = item.submitted == 1
+                ? `<span class="badge bg-success">提出済</span>`
+                : `<span class="badge bg-light text-muted border">未提出</span>`;
 
             return `
                 <tr>
-                    <td>${escapeHtml(item.name)}</td>
+                    <td>
+                        ${escapeHtml(item.name_kanji)}
+                        <div class="text-muted small">${escapeHtml(item.name_kana || '')}</div>
+                    </td>
                     <td>${amountDisplay}</td>
+                    <td class="text-center">${submittedBadge}</td>
                     <td class="text-center">
                         <input type="checkbox" ${item.paid ? 'checked' : ''}
-                            onchange="updateCollectionItem(${item.id}, this.checked)">
+                            onchange="updateCollectionItem(${item.collection_id}, ${item.id}, this.checked)">
                     </td>
                 </tr>
             `;
         }).join('');
 
-        const tableHtml = round.items.length > 0 ? `
-            <div class="table-responsive">
+        const tableHtml = items.length > 0 ? `
+            <div class="table-responsive mb-2">
                 <table class="table table-sm table-hover">
                     <thead class="table-light">
                         <tr>
                             <th>名前</th>
                             <th>金額</th>
-                            <th class="text-center">支払い済み</th>
+                            <th class="text-center">会員提出</th>
+                            <th class="text-center">通帳確認済み</th>
                         </tr>
                     </thead>
                     <tbody>${tableRows}</tbody>
                 </table>
             </div>
+            <div class="text-muted small mb-3">提出済み: ${submittedCount}/${items.length}人　通帳確認済み: ${paidCount}/${items.length}人</div>
         ` : '<p class="text-muted mb-2">データがありません。「データ生成」ボタンで生成してください。</p>';
+
+        // 期限設定UI（集金レコードが存在する場合のみ）
+        const deadlineHtml = colId ? `
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <label class="small text-muted mb-0">振込期限:</label>
+                <input type="date" class="form-control form-control-sm" style="width:160px;"
+                       id="deadline_${roundDef.id}" value="${escapeHtml(deadline)}">
+                <button class="btn btn-outline-secondary btn-sm"
+                        onclick="saveCollectionDeadline(${roundDef.id}, ${colId})">
+                    保存
+                </button>
+            </div>
+        ` : '';
 
         return `
             <div class="accordion-item">
                 <h2 class="accordion-header">
-                    <button class="accordion-button ${round.id === 1 ? '' : 'collapsed'}" type="button"
-                            data-bs-toggle="collapse" data-bs-target="#collapseRound${round.id}">
-                        ${escapeHtml(round.label)}
-                        <span class="badge bg-secondary ms-2">${round.items.length}件</span>
+                    <button class="accordion-button ${roundDef.id === 1 ? '' : 'collapsed'}" type="button"
+                            data-bs-toggle="collapse" data-bs-target="#collapseRound${roundDef.id}">
+                        ${escapeHtml(roundDef.label)}
+                        <span class="badge bg-secondary ms-2">${items.length}件</span>
+                        ${submittedCount > 0 ? `<span class="badge bg-success ms-1">提出 ${submittedCount}</span>` : ''}
                     </button>
                 </h2>
-                <div id="collapseRound${round.id}" class="accordion-collapse collapse ${round.id === 1 ? 'show' : ''}">
+                <div id="collapseRound${roundDef.id}" class="accordion-collapse collapse ${roundDef.id === 1 ? 'show' : ''}">
                     <div class="accordion-body">
+                        ${deadlineHtml}
                         ${tableHtml}
-                        <button class="btn btn-outline-primary btn-sm" onclick="generateCollection(${round.id})">
+                        <button class="btn btn-outline-primary btn-sm" onclick="generateCollection(${roundDef.id})">
                             <i class="bi bi-arrow-clockwise"></i> データ生成
                         </button>
                     </div>
@@ -1275,6 +2311,25 @@ function renderCollection(data) {
         <h4 class="mb-3">集金管理</h4>
         <div class="accordion">${accordionHtml}</div>
     `;
+}
+
+async function saveCollectionDeadline(roundNum, collectionId) {
+    const deadline = document.getElementById(`deadline_${roundNum}`)?.value || '';
+    try {
+        const res = await fetch(`/api/expeditions/${expeditionId}/collection/${collectionId}`, {
+            method:  'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ deadline: deadline || null }),
+        });
+        const result = await res.json();
+        if (result.success) {
+            showToast('振込期限を保存しました');
+        } else {
+            alert(result.error?.message || '保存に失敗しました');
+        }
+    } catch (err) {
+        alert('通信エラーが発生しました');
+    }
 }
 
 async function generateCollection(round) {
@@ -1299,9 +2354,9 @@ async function generateCollection(round) {
     }
 }
 
-async function updateCollectionItem(iid, paid) {
+async function updateCollectionItem(cid, iid, paid) {
     try {
-        const res    = await fetch(`/api/expeditions/${expeditionId}/collection/items/${iid}`, {
+        const res    = await fetch(`/api/expeditions/${expeditionId}/collection/${cid}/items/${iid}`, {
             method:  'PUT',
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify({ paid }),
@@ -1322,97 +2377,330 @@ async function updateCollectionItem(iid, paid) {
 // ==============================
 // タブ7: しおり
 // ==============================
-async function loadBooklet() {
-    if (bookletLoaded) return;
-    bookletLoaded = true;
+let _teamsForBooklet = null;
 
+async function loadBooklet() {
+    if (_bookletData !== null) { renderBookletEditor(_bookletData); return; }
     try {
-        const res  = await fetch(`/api/expeditions/${expeditionId}/booklet`);
-        const data = await res.json();
-        if (data.success) {
-            renderBooklet(data.data);
-        } else {
+        // しおりデータとチームデータを同時取得
+        const [bRes, tRes] = await Promise.all([
+            fetch(`/api/expeditions/${expeditionId}/booklet`),
+            fetch(`/api/expeditions/${expeditionId}/teams`),
+        ]);
+        const bData = await bRes.json();
+        const tData = await tRes.json();
+
+        if (!bData.success) {
             document.getElementById('bookletContent').innerHTML = '<div class="alert alert-danger">読み込みに失敗しました</div>';
+            return;
         }
+
+        _bookletData     = bData.data;
+        _teamsForBooklet = (tData.success ? tData.data.teams : null) || [];
+
+        // チーム分けを強制的に最新データで上書き
+        _bookletData.team_assignment = buildTeamText(_teamsForBooklet);
+
+        renderBookletEditor(_bookletData);
+
+        // チームデータを取り込んだ状態で自動保存
+        scheduleBookletSave();
     } catch (err) {
         console.error(err);
         document.getElementById('bookletContent').innerHTML = '<div class="alert alert-danger">通信エラーが発生しました</div>';
     }
 }
 
-function renderBooklet(b) {
+function buildTeamText(teams) {
+    if (!teams || !teams.length) return '';
+    return teams.map(team => {
+        const members = (team.members || []).map(m => `  ・${m.name_kanji}`).join('\n');
+        return `【${team.name}】\n${members}`;
+    }).join('\n\n');
+}
+
+function renderBookletEditor(b) {
     const publicToken = b.public_token || '';
     const publicUrl   = publicToken ? `/public/expedition-booklet/${publicToken}` : '';
 
     document.getElementById('bookletContent').innerHTML = `
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h4 class="mb-0">しおり編集</h4>
-            <div class="d-flex gap-2">
-                <button class="btn btn-outline-secondary btn-sm" onclick="saveBooklet()">
-                    <i class="bi bi-save"></i> 保存
-                </button>
+            <div class="d-flex gap-2 align-items-center">
+                <span id="bookletSaveStatus" class="text-muted small"></span>
                 <button class="btn btn-primary btn-sm" onclick="publishBooklet()">
-                    <i class="bi bi-globe2"></i> 公開
+                    ${b.published ? '再公開' : '公開'}
                 </button>
             </div>
         </div>
 
         ${publicUrl ? `
-        <div class="alert alert-success mb-3">
-            <strong>公開URL:</strong>
+        <div class="alert alert-success mb-3 py-2">
+            <strong>公開URL</strong>
             <div class="input-group input-group-sm mt-1">
                 <input type="text" class="form-control" value="${escapeHtml(window.location.origin + publicUrl)}" readonly id="bookletPublicUrlInput">
-                <button class="btn btn-outline-secondary" onclick="copyBookletUrl()">
-                    <i class="bi bi-clipboard"></i> コピー
-                </button>
+                <button class="btn btn-outline-secondary" onclick="copyBookletUrl()">コピー</button>
             </div>
         </div>
         ` : ''}
 
-        <div class="mb-3">
-            <label class="form-label fw-bold">持ち物</label>
-            <textarea class="form-control" id="bookletItemsToBring" rows="5">${escapeHtml(b.items_to_bring || '')}</textarea>
+        <!-- 集合情報 -->
+        <div class="card mb-3">
+            <div class="card-header fw-bold">集合情報</div>
+            <div class="card-body">
+                <div class="row g-2">
+                    <div class="col-12">
+                        <label class="form-label form-label-sm mb-1">開催場所</label>
+                        <input type="text" class="form-control form-control-sm" id="bVenue"
+                               value="${escapeHtml(b.venue || '')}" placeholder="開催場所（例: ○○テニスコート）"
+                               oninput="updateBookletField('venue', this.value)">
+                    </div>
+                    <div class="col-12">
+                        <div class="alert alert-secondary py-2 mb-0" style="font-size:.85rem;">
+                            <i class="bi bi-car-front me-1"></i>集合場所・集合時間は各車のドライバーに直接確認してください
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label form-label-sm mb-1">メモ</label>
+                        <textarea class="form-control form-control-sm" id="bMeetingNote" rows="2"
+                                  oninput="updateBookletField('meeting_note', this.value)"
+                                  placeholder="その他の連絡事項">${escapeHtml(b.meeting_note || '')}</textarea>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="mb-3">
-            <label class="form-label fw-bold">車割</label>
-            <textarea class="form-control" id="bookletCarAssignment" rows="5">${escapeHtml(b.car_assignment || '')}</textarea>
+
+        <!-- 持ち物 -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center fw-bold">
+                持ち物
+                <button class="btn btn-outline-primary btn-sm" onclick="addBringItem()">＋ 追加</button>
+            </div>
+            <div class="card-body p-2">
+                <div id="bringItemList">${renderBringItems(b.items_to_bring || [])}</div>
+            </div>
         </div>
-        <div class="mb-3">
-            <label class="form-label fw-bold">チーム割</label>
-            <textarea class="form-control" id="bookletTeamAssignment" rows="5">${escapeHtml(b.team_assignment || '')}</textarea>
+
+        <!-- 車割（DBから自動表示） -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center fw-bold">
+                車割
+                <span class="badge bg-secondary fw-normal" style="font-size:.75rem;">車割タブから自動取り込み</span>
+            </div>
+            <div class="card-body p-2 text-muted small">
+                車割タブで登録した内容がしおりに自動反映されます。
+            </div>
         </div>
-        <div class="mb-3">
-            <label class="form-label fw-bold">部屋割</label>
-            <textarea class="form-control" id="bookletRoomAssignment" rows="5">${escapeHtml(b.room_assignment || '')}</textarea>
+
+        <!-- チーム分け（自動取り込み） -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center fw-bold">
+                チーム分け
+                <span class="badge bg-secondary fw-normal" style="font-size:.75rem;">チームタブから自動取り込み</span>
+            </div>
+            <div class="card-body p-2">
+                ${renderTeamDisplay(_teamsForBooklet || [])}
+            </div>
+        </div>
+
+        <!-- 部屋割り -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center fw-bold">
+                部屋割り
+                <button class="btn btn-outline-primary btn-sm" onclick="addRoomCategory()">＋ カテゴリ追加</button>
+            </div>
+            <div class="card-body p-2">
+                <div id="roomAssignmentList">${renderRoomAssignments(b.room_assignments || [])}</div>
+            </div>
+        </div>
+
+        <!-- 備考 -->
+        <div class="card mb-3">
+            <div class="card-header fw-bold">備考</div>
+            <div class="card-body p-2">
+                <textarea class="form-control form-control-sm" id="bNotes" rows="4"
+                          oninput="updateBookletField('notes', this.value)"
+                          placeholder="その他の注意事項など">${escapeHtml(b.notes || '')}</textarea>
+            </div>
         </div>
     `;
 }
 
-async function saveBooklet() {
-    const data = {
-        items_to_bring:  document.getElementById('bookletItemsToBring')?.value  || '',
-        car_assignment:  document.getElementById('bookletCarAssignment')?.value  || '',
-        team_assignment: document.getElementById('bookletTeamAssignment')?.value || '',
-        room_assignment: document.getElementById('bookletRoomAssignment')?.value || '',
-    };
+function renderTeamDisplay(teams) {
+    if (!teams || !teams.length) {
+        return '<p class="text-muted small mb-0">チームが登録されていません（チームタブで登録してください）</p>';
+    }
+    return `<div class="row g-2">` + teams.map(team => `
+        <div class="col-md-4 col-sm-6">
+            <div class="border rounded p-2 h-100">
+                <div class="fw-bold mb-1">${escapeHtml(team.name)}</div>
+                <ul class="list-unstyled mb-0">
+                    ${sortTeamMembers(team.members || []).map(m => `<li class="small">・${escapeHtml(m.name_kanji)}</li>`).join('')}
+                    ${!(team.members || []).length ? '<li class="text-muted small">メンバーなし</li>' : ''}
+                </ul>
+            </div>
+        </div>`).join('') + `</div>`;
+}
+
+function updateBookletField(key, value) {
+    if (!_bookletData) return;
+    _bookletData[key] = value;
+    scheduleBookletSave();
+}
+
+function scheduleBookletSave() {
+    clearTimeout(_bookletSaveTimer);
+    _bookletSaveTimer = setTimeout(() => saveBooklet(true), 1500);
+}
+
+function setBookletSaveStatus(status) {
+    const el = document.getElementById('bookletSaveStatus');
+    if (!el) return;
+    if (status === 'saving') el.textContent = '保存中...';
+    else if (status === 'saved') el.textContent = '自動保存済み';
+    else if (status === 'error') el.textContent = '保存失敗';
+}
+
+/* ---- 持ち物 ---- */
+function renderBringItems(items) {
+    if (!items.length) return '<p class="text-muted small p-2 mb-0">まだ登録されていません</p>';
+    return items.map((it, i) => `
+    <div class="d-flex gap-2 align-items-center mb-1">
+        <input type="checkbox" class="form-check-input mt-0" ${it.highlight ? 'checked' : ''}
+               onchange="updateBringItem(${i}, 'highlight', this.checked)" title="強調">
+        <input type="text" class="form-control form-control-sm" value="${escapeHtml(it.text || '')}"
+               oninput="updateBringItem(${i}, 'text', this.value)" placeholder="持ち物">
+        <input type="text" class="form-control form-control-sm" value="${escapeHtml(it.note || '')}"
+               oninput="updateBringItem(${i}, 'note', this.value)" placeholder="補足（任意）" style="max-width:160px;">
+        <button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="removeBringItem(${i})">×</button>
+    </div>`).join('');
+}
+
+function addBringItem() {
+    _bookletData.items_to_bring = _bookletData.items_to_bring || [];
+    _bookletData.items_to_bring.push({text: '', note: '', highlight: false});
+    document.getElementById('bringItemList').innerHTML = renderBringItems(_bookletData.items_to_bring);
+    scheduleBookletSave();
+}
+
+function updateBringItem(i, key, val) {
+    if (_bookletData.items_to_bring && _bookletData.items_to_bring[i] !== undefined) {
+        _bookletData.items_to_bring[i][key] = val;
+        scheduleBookletSave();
+    }
+}
+
+function removeBringItem(i) {
+    _bookletData.items_to_bring.splice(i, 1);
+    document.getElementById('bringItemList').innerHTML = renderBringItems(_bookletData.items_to_bring);
+    scheduleBookletSave();
+}
+
+/* ---- 部屋割り ---- */
+function renderRoomAssignments(categories) {
+    if (!categories.length) return '<p class="text-muted small p-2 mb-0">まだ登録されていません</p>';
+    return categories.map((cat, ci) => `
+    <div class="border rounded mb-2 p-2">
+        <div class="d-flex gap-2 align-items-center mb-2">
+            <input type="text" class="form-control form-control-sm" style="max-width:200px;"
+                   value="${escapeHtml(cat.category || '')}"
+                   oninput="updateRoomCategory(${ci}, this.value)" placeholder="カテゴリ（例: 男性）">
+            <button class="btn btn-outline-secondary btn-sm py-0 ms-auto" onclick="addRoom(${ci})">＋ 部屋追加</button>
+            <button class="btn btn-outline-danger btn-sm py-0" onclick="removeRoomCategory(${ci})">削除</button>
+        </div>
+        <div id="roomList_${ci}" class="d-flex flex-wrap gap-2">
+            ${renderRooms(cat.rooms || [], ci)}
+        </div>
+    </div>`).join('');
+}
+
+function renderRooms(rooms, ci) {
+    if (!rooms.length) return '<span class="text-muted small">部屋なし</span>';
+    return rooms.map((room, ri) => `
+    <div class="d-flex gap-1 align-items-center border rounded px-2 py-1">
+        <input type="text" class="form-control form-control-sm" style="width:80px;"
+               value="${escapeHtml(room.room_no || '')}"
+               oninput="updateRoom(${ci}, ${ri}, 'room_no', this.value)" placeholder="部屋番号">
+        <span class="text-muted small">定員</span>
+        <input type="number" class="form-control form-control-sm" style="width:60px;"
+               value="${room.capacity || 0}"
+               oninput="updateRoom(${ci}, ${ri}, 'capacity', parseInt(this.value) || 0)" min="0">
+        <span class="text-muted small">人</span>
+        <button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="removeRoom(${ci}, ${ri})">×</button>
+    </div>`).join('');
+}
+
+function addRoomCategory() {
+    _bookletData.room_assignments = _bookletData.room_assignments || [];
+    _bookletData.room_assignments.push({category: '', rooms: []});
+    document.getElementById('roomAssignmentList').innerHTML = renderRoomAssignments(_bookletData.room_assignments);
+    scheduleBookletSave();
+}
+
+function removeRoomCategory(ci) {
+    _bookletData.room_assignments.splice(ci, 1);
+    document.getElementById('roomAssignmentList').innerHTML = renderRoomAssignments(_bookletData.room_assignments);
+    scheduleBookletSave();
+}
+
+function updateRoomCategory(ci, val) {
+    if (_bookletData.room_assignments[ci]) {
+        _bookletData.room_assignments[ci].category = val;
+        scheduleBookletSave();
+    }
+}
+
+function addRoom(ci) {
+    _bookletData.room_assignments[ci].rooms = _bookletData.room_assignments[ci].rooms || [];
+    _bookletData.room_assignments[ci].rooms.push({room_no: '', capacity: 0});
+    document.getElementById(`roomList_${ci}`).innerHTML = renderRooms(_bookletData.room_assignments[ci].rooms, ci);
+    scheduleBookletSave();
+}
+
+function removeRoom(ci, ri) {
+    _bookletData.room_assignments[ci].rooms.splice(ri, 1);
+    document.getElementById(`roomList_${ci}`).innerHTML = renderRooms(_bookletData.room_assignments[ci].rooms, ci);
+    scheduleBookletSave();
+}
+
+function updateRoom(ci, ri, key, val) {
+    if (_bookletData.room_assignments[ci] && _bookletData.room_assignments[ci].rooms[ri]) {
+        _bookletData.room_assignments[ci].rooms[ri][key] = val;
+        scheduleBookletSave();
+    }
+}
+
+
+/* ---- 保存 ---- */
+async function saveBooklet(auto = false) {
+    if (_bookletSaving || !_bookletData) return;
+    _bookletSaving = true;
+    setBookletSaveStatus('saving');
 
     try {
         const res    = await fetch(`/api/expeditions/${expeditionId}/booklet`, {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify(data),
+            body:    JSON.stringify(_bookletData),
         });
         const result = await res.json();
         if (result.success) {
-            showToast('保存しました');
+            _bookletData = result.data;
+            setBookletSaveStatus('saved');
+            if (!auto) showToast('保存しました');
         } else {
-            alert(result.error?.message || '保存に失敗しました');
+            setBookletSaveStatus('error');
+            if (!auto) alert(result.error?.message || '保存に失敗しました');
         }
     } catch (err) {
-        alert('通信エラーが発生しました');
+        setBookletSaveStatus('error');
+        if (!auto) alert('通信エラーが発生しました');
+    } finally {
+        _bookletSaving = false;
     }
 }
 
+/* ---- 公開 ---- */
 async function publishBooklet() {
     if (!confirm('しおりを公開しますか？')) return;
 
@@ -1425,7 +2713,7 @@ async function publishBooklet() {
         const result = await res.json();
         if (result.success) {
             showToast('公開しました');
-            bookletLoaded = false;
+            _bookletData = null;
             await loadBooklet();
         } else {
             alert(result.error?.message || '公開に失敗しました');
@@ -1441,5 +2729,226 @@ function copyBookletUrl() {
     input.select();
     document.execCommand('copy');
     showToast('URLをコピーしました');
+}
+
+// ==================== タブ8: レンタカー清算 ====================
+
+async function loadCarExpenses() {
+    // エクスポートボタンのURLをセット
+    document.getElementById('btnExpenseXlsx').href = `/api/expeditions/${expeditionId}/car-expenses/export/xlsx`;
+    document.getElementById('btnExpensePdf').href  = `/api/expeditions/${expeditionId}/car-expenses/export/pdf`;
+
+    try {
+        // 基本情報から expense_deadline を取得してフォームにセット
+        const infoRes  = await fetch(`/api/expeditions/${expeditionId}`);
+        const infoData = await infoRes.json();
+        if (infoData.success && infoData.data) {
+            document.getElementById('expenseDeadlineInput').value = infoData.data.expense_deadline || '';
+        }
+
+        // 申請一覧と清算一覧を並行取得
+        const [expRes, setRes] = await Promise.all([
+            fetch(`/api/expeditions/${expeditionId}/car-expenses`),
+            fetch(`/api/expeditions/${expeditionId}/car-expenses/settlement`),
+        ]);
+        const expData = await expRes.json();
+        const setData = await setRes.json();
+
+        if (!expData.success) {
+            document.getElementById('carExpenseList').innerHTML = '<div class="alert alert-danger">読み込みに失敗しました</div>';
+            return;
+        }
+        renderCarExpenses(expData.data || []);
+
+        if (setData.success) {
+            renderCarExpenseSettlement(setData.data);
+        }
+    } catch (err) {
+        document.getElementById('carExpenseList').innerHTML = '<div class="alert alert-danger">通信エラーが発生しました</div>';
+    }
+}
+
+function renderCarExpenses(expenses) {
+    if (expenses.length === 0) {
+        document.getElementById('carExpenseList').innerHTML =
+            '<div class="alert alert-info">申請はまだありません。</div>';
+        return;
+    }
+
+    let totalRental = 0, totalGas = 0, totalHighway = 0, totalOther = 0;
+    const rows = expenses.map(e => {
+        const rental  = parseInt(e.rental_fee)  || 0;
+        const gas     = parseInt(e.gas_fee)     || 0;
+        const highway = parseInt(e.highway_fee) || 0;
+        const other   = parseInt(e.other_fee)   || 0;
+        const total   = rental + gas + highway + other;
+        totalRental  += rental;
+        totalGas     += gas;
+        totalHighway += highway;
+        totalOther   += other;
+
+        const otherLabel = other > 0 && e.other_description
+            ? `¥${other.toLocaleString()}<br><small class="text-muted">${escapeHtml(e.other_description)}</small>`
+            : (other > 0 ? `¥${other.toLocaleString()}` : '—');
+        const noteHtml = e.note ? `<small class="text-muted">${escapeHtml(e.note)}</small>` : '';
+
+        return `<tr>
+            <td>${escapeHtml(e.name_kanji)}</td>
+            <td class="text-end">${rental  > 0 ? '¥' + rental.toLocaleString()  : '—'}</td>
+            <td class="text-end">${gas     > 0 ? '¥' + gas.toLocaleString()     : '—'}</td>
+            <td class="text-end">${highway > 0 ? '¥' + highway.toLocaleString() : '—'}</td>
+            <td class="text-end">${otherLabel}</td>
+            <td class="text-end fw-bold">¥${total.toLocaleString()}</td>
+            <td class="text-muted small">${noteHtml}</td>
+            <td>
+                <button class="btn btn-outline-danger btn-sm py-0"
+                        onclick="deleteCarExpense(${e.id})">削除</button>
+            </td>
+        </tr>`;
+    }).join('');
+
+    const grandTotal = totalRental + totalGas + totalHighway + totalOther;
+
+    document.getElementById('carExpenseList').innerHTML = `
+        <div class="table-responsive">
+            <table class="table table-sm table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th>氏名</th>
+                        <th class="text-end">レンタカー代</th>
+                        <th class="text-end">ガソリン代</th>
+                        <th class="text-end">高速料金</th>
+                        <th class="text-end">その他</th>
+                        <th class="text-end">合計</th>
+                        <th>備考</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+                <tfoot class="table-warning fw-bold">
+                    <tr>
+                        <td>合計</td>
+                        <td class="text-end">¥${totalRental.toLocaleString()}</td>
+                        <td class="text-end">¥${totalGas.toLocaleString()}</td>
+                        <td class="text-end">¥${totalHighway.toLocaleString()}</td>
+                        <td class="text-end">¥${totalOther.toLocaleString()}</td>
+                        <td class="text-end">¥${grandTotal.toLocaleString()}</td>
+                        <td colspan="2"></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>`;
+}
+
+function renderCarExpenseSettlement(data) {
+    const el       = document.getElementById('carSettlementList');
+    const items    = data.settlement  || [];
+    const excluded = data.excluded    || [];
+
+    if (items.length === 0 && excluded.length === 0) {
+        el.innerHTML = '<div class="alert alert-info">清算対象の参加者がいません。</div>';
+        return;
+    }
+
+    const rows = items.map(item => {
+        const balance = parseInt(item.balance) || 0;
+        const share   = parseInt(item.share)   || 0;
+        const paid    = parseInt(item.paid)    || 0;
+
+        let rowClass   = '';
+        let statusHtml = '';
+
+        if (!item.has_expense) {
+            rowClass   = 'table-secondary';
+            statusHtml = '<span class="text-muted">申請なし（負担分: ¥' + share.toLocaleString() + '）</span>';
+        } else if (balance > 0) {
+            rowClass   = 'table-success';
+            statusHtml = `<span class="text-success fw-bold">受取: ¥${balance.toLocaleString()}</span>`;
+        } else if (balance < 0) {
+            rowClass   = 'table-danger';
+            statusHtml = `<span class="text-danger fw-bold">支払: ¥${Math.abs(balance).toLocaleString()}</span>`;
+        } else {
+            statusHtml = '<span class="text-muted">清算なし</span>';
+        }
+
+        return `<tr class="${rowClass}">
+            <td>${escapeHtml(item.name_kanji)}</td>
+            <td class="text-end">${item.has_expense ? '¥' + paid.toLocaleString() : '—'}</td>
+            <td class="text-end">¥${share.toLocaleString()}</td>
+            <td>${statusHtml}</td>
+        </tr>`;
+    }).join('');
+
+    // 清算対象外
+    let excludedHtml = '';
+    if (excluded.length > 0) {
+        const exRows = excluded.map(p =>
+            `<tr class="table-light text-muted">
+                <td>${escapeHtml(p.name_kanji)}</td>
+                <td colspan="3"><small>車割未登録のため清算対象外</small></td>
+            </tr>`
+        ).join('');
+        excludedHtml = `
+            <h6 class="mt-4 text-muted">清算対象外</h6>
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead class="table-light">
+                        <tr>
+                            <th>氏名</th>
+                            <th colspan="3"></th>
+                        </tr>
+                    </thead>
+                    <tbody>${exRows}</tbody>
+                </table>
+            </div>`;
+    }
+
+    el.innerHTML = `
+        <h6 class="mt-3">清算一覧</h6>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th>氏名</th>
+                        <th class="text-end">立替金額</th>
+                        <th class="text-end">負担分</th>
+                        <th>清算</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>
+        <small class="text-muted">※ 負担分 = 総費用 ÷ 車割登録人数。立替金額 − 負担分 が正なら受取、負なら支払い。</small>
+        ${excludedHtml}`;
+}
+
+async function saveExpenseDeadline() {
+    const deadline = document.getElementById('expenseDeadlineInput').value || null;
+    try {
+        const res = await fetch(`/api/expeditions/${expeditionId}`, {
+            method:  'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ expense_deadline: deadline }),
+        });
+        const data = await res.json();
+        if (data.success) {
+            const el = document.getElementById('expenseDeadlineSaved');
+            el.classList.remove('d-none');
+            setTimeout(() => el.classList.add('d-none'), 2000);
+        }
+    } catch (err) {
+        alert('保存に失敗しました');
+    }
+}
+
+async function deleteCarExpense(id) {
+    if (!confirm('この申請を削除しますか？')) return;
+    try {
+        const res = await fetch(`/api/expeditions/${expeditionId}/car-expenses/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) loadCarExpenses();
+    } catch (err) {
+        alert('通信エラーが発生しました');
+    }
 }
 </script>

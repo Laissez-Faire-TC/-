@@ -72,6 +72,9 @@ class MemberPortalController
         $collItemModel      = new CampCollectionItem();
         $pendingCollections = $collItemModel->getPendingByMemberId($memberId);
 
+        // 遠征振込確認フォーム（未提出）
+        $pendingExpeditionCollections = ExpeditionCollectionItem::getPendingByMemberId($memberId);
+
         $feeItemModel      = new MembershipFeeItem();
         $pendingFees       = $feeItemModel->getPendingByMemberId($memberId);
 
@@ -91,16 +94,73 @@ class MemberPortalController
             }
         }
 
+        // しおりが公開されている合宿のうち、ログイン会員が申し込み済みのものだけ表示
+        $bookletModel   = new CampBooklet();
+        $allBookletCamps = $bookletModel->getPublicCamps();
+        $appModel       = new CampApplication();
+        $bookletCamps   = array_values(array_filter($allBookletCamps, function($bc) use ($memberId, $appModel) {
+            return $appModel->findByCampAndMember((int)$bc['id'], $memberId) !== null;
+        }));
+
+        // 受付中の遠征（有効なトークンがある遠征）
+        $activeExpeditions = [];
+        foreach (ExpeditionToken::getActiveExpeditionsWithTokens() as $et) {
+            $participants   = ExpeditionParticipant::findByExpedition((int)$et['id']);
+            $alreadyApplied = false;
+            foreach ($participants as $p) {
+                if ((int)$p['member_id'] === $memberId) {
+                    $alreadyApplied = true;
+                    break;
+                }
+            }
+            $activeExpeditions[] = array_merge($et, ['already_applied' => $alreadyApplied]);
+        }
+
+        // 費用申請受付中の遠征（参加確定 & 申請期限内）
+        $expenseExpeditions = Database::getInstance()->fetchAll(
+            "SELECT e.id, e.name, e.start_date, e.end_date, e.expense_deadline
+             FROM expeditions e
+             JOIN expedition_participants ep ON ep.expedition_id = e.id
+             WHERE ep.member_id = ?
+               AND ep.status = 'confirmed'
+               AND e.expense_deadline IS NOT NULL
+               AND e.expense_deadline >= CURDATE()
+             ORDER BY e.expense_deadline ASC",
+            [$memberId]
+        );
+        foreach ($expenseExpeditions as &$ex) {
+            $ex['my_expense'] = ExpeditionCarExpense::findByMemberAndExpedition($memberId, (int)$ex['id']);
+        }
+        unset($ex);
+
+        // 公開済み遠征しおり（自分が参加者の遠征のみ）
+        $expeditionBooklets = Database::getInstance()->fetchAll(
+            "SELECT e.id, e.name, e.start_date, e.end_date, eb.public_token
+             FROM expeditions e
+             JOIN expedition_booklets eb ON eb.expedition_id = e.id
+             JOIN expedition_participants ep ON ep.expedition_id = e.id
+             WHERE eb.published = 1
+               AND ep.member_id = ?
+               AND ep.status = 'confirmed'
+             ORDER BY e.start_date DESC",
+            [$memberId]
+        );
+
         $this->render('member/home', [
-            'activeCamps'        => $activeCamps,
-            'activeEvents'       => $activeEvents,
-            'memberName'         => $_SESSION['member_name'] ?? '',
-            'memberId'           => $memberId,
-            'pendingCollections' => $pendingCollections,
-            'pendingFees'        => $pendingFees,
-            'renewOpen'          => $renewOpen,
-            'alreadyRenewed'     => $alreadyRenewed,
-            'renewYear'          => $renewOpenYear['year'] ?? null,
+            'activeCamps'         => $activeCamps,
+            'activeEvents'        => $activeEvents,
+            'memberName'          => $_SESSION['member_name'] ?? '',
+            'memberId'            => $memberId,
+            'pendingCollections'  => $pendingCollections,
+            'pendingFees'         => $pendingFees,
+            'renewOpen'           => $renewOpen,
+            'alreadyRenewed'      => $alreadyRenewed,
+            'renewYear'           => $renewOpenYear['year'] ?? null,
+            'bookletCamps'        => $bookletCamps,
+            'activeExpeditions'            => $activeExpeditions,
+            'expenseExpeditions'           => $expenseExpeditions,
+            'expeditionBooklets'           => $expeditionBooklets,
+            'pendingExpeditionCollections' => $pendingExpeditionCollections,
         ]);
     }
 
@@ -507,6 +567,105 @@ class MemberPortalController
     }
 
     /**
+     * 合宿しおり表示（会員ログイン済み）
+     * GET /member/camp/{id}/booklet
+     */
+    public function booklet(array $params): void
+    {
+        if (!$this->checkAuth()) {
+            Response::redirect('/member/login');
+            return;
+        }
+
+        $campId   = (int)$params['id'];
+        $memberId = (int)($_SESSION['member_id'] ?? 0);
+
+        $campModel    = new Camp();
+        $bookletModel = new CampBooklet();
+
+        $camp    = $campModel->find($campId);
+        $booklet = $bookletModel->findByCampId($campId);
+
+        if (!$camp || !$booklet || !(int)$booklet['is_public']) {
+            http_response_code(404);
+            $this->render('error', ['message' => 'しおりが見つかりません']);
+            return;
+        }
+
+        // 参加者チェック：申し込み済みでない会員は閲覧不可
+        $appModel = new CampApplication();
+        if ($appModel->findByCampAndMember($campId, $memberId) === null) {
+            http_response_code(403);
+            $this->render('error', ['message' => 'このしおりは合宿参加者のみ閲覧できます']);
+            return;
+        }
+
+        $memberModel = new Member();
+        $member      = $memberModel->find($memberId);
+        $myName      = $member ? $member['name_kanji'] : '';
+
+        $participantModel = new Participant();
+        $genderMap = [];
+        foreach ($participantModel->getByCampId($campId) as $p) {
+            $genderMap[$p['name']] = $p['gender'];
+        }
+
+        $this->render('member/booklet', [
+            'camp'       => $camp,
+            'booklet'    => $booklet,
+            'memberName' => $_SESSION['member_name'] ?? '',
+            'myName'     => $myName,
+            'isLoggedIn' => true,
+            'genderMap'  => $genderMap,
+        ]);
+    }
+
+    /**
+     * 合宿しおり公開URL表示（ログイン不要）
+     * GET /booklet/{token}
+     */
+    public function bookletPublic(array $params): void
+    {
+        $token        = $params['token'];
+        $bookletModel = new CampBooklet();
+        $booklet      = $bookletModel->findByToken($token);
+
+        if (!$booklet) {
+            http_response_code(404);
+            $this->render('error', ['message' => 'しおりが見つかりません']);
+            return;
+        }
+
+        $campModel = new Camp();
+        $camp      = $campModel->find((int)$booklet['camp_id']);
+
+        $myName     = '';
+        $isLoggedIn = false;
+        if ($this->checkAuth()) {
+            $memberId    = (int)($_SESSION['member_id'] ?? 0);
+            $memberModel = new Member();
+            $member      = $memberModel->find($memberId);
+            $myName      = $member ? $member['name_kanji'] : '';
+            $isLoggedIn  = true;
+        }
+
+        $participantModel = new Participant();
+        $genderMap = [];
+        foreach ($participantModel->getByCampId((int)$booklet['camp_id']) as $p) {
+            $genderMap[$p['name']] = $p['gender'];
+        }
+
+        $this->render('member/booklet', [
+            'camp'       => $camp,
+            'booklet'    => $booklet,
+            'memberName' => $_SESSION['member_name'] ?? '',
+            'myName'     => $myName,
+            'isLoggedIn' => $isLoggedIn,
+            'genderMap'  => $genderMap,
+        ]);
+    }
+
+    /**
      * デバッグ用（確認後削除）
      */
     public function debugMember(array $params): void
@@ -570,5 +729,98 @@ class MemberPortalController
         $content = ob_get_clean();
 
         include VIEWS_PATH . '/layouts/member.php';
+    }
+
+    // ==================== 遠征集金 ====================
+
+    /**
+     * 遠征集金フォームページ
+     * GET /member/expedition-collection/{id}  (id = collection_id)
+     */
+    public function expeditionCollectionForm(array $params): void
+    {
+        if (!$this->checkAuth()) {
+            Response::redirect('/member/login');
+            return;
+        }
+
+        $collectionId = (int)$params['id'];
+        $memberId     = (int)($_SESSION['member_id'] ?? 0);
+
+        $item = ExpeditionCollectionItem::findByMemberAndCollection($memberId, $collectionId);
+        if (!$item) {
+            http_response_code(404);
+            $this->render('error', ['message' => '集金情報が見つかりません']);
+            return;
+        }
+
+        $collection = Database::getInstance()->fetch(
+            "SELECT ec.*, e.name AS expedition_name, e.start_date, e.end_date
+             FROM expedition_collections ec
+             JOIN expeditions e ON e.id = ec.expedition_id
+             WHERE ec.id = ?",
+            [$collectionId]
+        );
+        if (!$collection) {
+            http_response_code(404);
+            $this->render('error', ['message' => '集金情報が見つかりません']);
+            return;
+        }
+
+        $this->render('member/expedition_collection', [
+            'item'        => $item,
+            'collection'  => $collection,
+            'memberName'  => $_SESSION['member_name'] ?? '',
+            'memberId'    => $memberId,
+        ]);
+    }
+
+    /**
+     * 遠征集金 提出 API
+     * POST /api/member/expedition-collection-items/{id}/submit
+     */
+    public function submitExpeditionCollection(array $params): void
+    {
+        if (!$this->checkAuth()) {
+            Response::error('ログインが必要です', 401, 'UNAUTHORIZED');
+            return;
+        }
+
+        $itemId   = (int)$params['id'];
+        $memberId = (int)($_SESSION['member_id'] ?? 0);
+
+        $item = ExpeditionCollectionItem::find($itemId);
+        if (!$item || (int)$item['member_id'] !== $memberId) {
+            Response::error('Not found', 404, 'NOT_FOUND');
+            return;
+        }
+
+        if ((int)$item['submitted'] === 1) {
+            Response::error('すでに提出済みです', 400, 'ALREADY_SUBMITTED');
+            return;
+        }
+
+        $transferred = Request::get('transferred');
+        if (!$transferred || $transferred === '0' || $transferred === 'false') {
+            Response::error('振り込み完了のチェックが必要です', 400, 'VALIDATION_ERROR');
+            return;
+        }
+
+        // 期限超過時は遅延理由が必須
+        $collection = Database::getInstance()->fetch(
+            "SELECT deadline FROM expedition_collections WHERE id = ?",
+            [$item['collection_id']]
+        );
+        $lateReason = Request::get('late_reason') ?? null;
+
+        if ($collection && !empty($collection['deadline']) && $collection['deadline'] < date('Y-m-d')) {
+            if (empty($lateReason)) {
+                Response::error('入金遅れの理由を入力してください', 400, 'VALIDATION_ERROR');
+                return;
+            }
+        }
+
+        ExpeditionCollectionItem::submit($itemId, $lateReason ?: null);
+        Response::success([], '提出しました');
     }
 }

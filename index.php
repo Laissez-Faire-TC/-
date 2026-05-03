@@ -239,10 +239,14 @@ $router->put('/api/member/profile', 'MemberPortalController@updateProfile');
 // 会員変更通知既読ルート（管理者）
 $router->post('/api/member-change-notifications/{id}/read', 'PageController@dismissChangeNotification');
 
-// 会員向け集金ルート
+// 会員向け集金ルート（合宿）
 $router->get('/api/member/collections', 'MemberPortalController@myCollections');
 $router->get('/member/collection/{id}', 'MemberPortalController@collectionForm');
 $router->post('/api/member/collection-items/{id}/submit', 'MemberPortalController@submitCollection');
+
+// 会員向け集金ルート（遠征）
+$router->get('/member/expedition-collection/{id}', 'MemberPortalController@expeditionCollectionForm');
+$router->post('/api/member/expedition-collection-items/{id}/submit', 'MemberPortalController@submitExpeditionCollection');
 
 // 入会管理ページ（年度管理＋入会金管理＋新規入会者リスト統合）
 $router->get('/enrollment-management', 'EnrollmentManagementController@index');
@@ -295,6 +299,9 @@ $router->delete('/api/expeditions/{id}/participants/{pid}', 'ExpeditionControlle
 
 // 車割（固定パスを先に登録）
 $router->get('/api/expeditions/{id}/cars/settlement', 'ExpeditionController@getSettlement');
+$router->post('/api/expeditions/{id}/cars/auto-assign', 'ExpeditionController@autoAssignCars');
+$router->post('/api/expeditions/{id}/cars/auto-assign-return', 'ExpeditionController@autoAssignReturnCars');
+$router->post('/api/expeditions/{id}/cars/resolve-stations', 'ExpeditionController@resolveParticipantStations');
 $router->get('/api/expeditions/{id}/cars', 'ExpeditionController@getCars');
 $router->post('/api/expeditions/{id}/cars', 'ExpeditionController@addCar');
 $router->put('/api/expeditions/{id}/cars/{cid}', 'ExpeditionController@updateCar');
@@ -317,17 +324,38 @@ $router->delete('/api/expeditions/{id}/teams/{tid}/members/{mid}', 'ExpeditionCo
 // 集金
 $router->get('/api/expeditions/{id}/collection', 'ExpeditionController@getCollection');
 $router->post('/api/expeditions/{id}/collection/generate', 'ExpeditionController@generateCollection');
+$router->put('/api/expeditions/{id}/collection/{cid}', 'ExpeditionController@updateCollection');
 $router->put('/api/expeditions/{id}/collection/{cid}/items/{iid}', 'ExpeditionController@updateCollectionItem');
 
 // 申し込みURL
 $router->get('/api/expeditions/{id}/application-url', 'ExpeditionController@getApplicationUrl');
 $router->post('/api/expeditions/{id}/application-url', 'ExpeditionController@generateApplicationUrl');
 
+// 遠征申し込みページ（公開・会員ログイン使用）
+$router->get('/apply/expedition/{token}', 'ExpeditionApplicationController@form');
+$router->get('/apply/expedition/{token}/confirm', 'ExpeditionApplicationController@confirm');
+$router->get('/apply/expedition/{token}/complete', 'ExpeditionApplicationController@complete');
+$router->post('/api/apply/expedition/{token}', 'ExpeditionApplicationController@apply');
+
 // しおり（固定パスを先に登録）
 $router->post('/api/expeditions/{id}/booklet/publish', 'ExpeditionBookletController@publishBooklet');
 $router->get('/api/expeditions/{id}/booklet', 'ExpeditionBookletController@getBooklet');
 $router->post('/api/expeditions/{id}/booklet', 'ExpeditionBookletController@saveBooklet');
 $router->get('/public/expedition-booklet/{token}', 'ExpeditionBookletController@viewPublicBooklet');
+
+// エクスポート
+$router->get('/api/expeditions/{id}/export/xlsx', 'ExpeditionExportController@xlsx');
+$router->get('/api/expeditions/{id}/export/pdf',  'ExpeditionExportController@pdf');
+
+// レンタカー清算（管理者）- 固定パスを先に登録
+$router->get('/api/expeditions/{id}/car-expenses/settlement',    'ExpeditionCarExpenseController@settlement');
+$router->get('/api/expeditions/{id}/car-expenses/export/xlsx',   'ExpeditionCarExpenseController@exportXlsx');
+$router->get('/api/expeditions/{id}/car-expenses/export/pdf',    'ExpeditionCarExpenseController@exportPdf');
+$router->get('/api/expeditions/{id}/car-expenses',               'ExpeditionCarExpenseController@index');
+$router->delete('/api/expeditions/{id}/car-expenses/{eid}',      'ExpeditionCarExpenseController@destroy');
+
+// レンタカー清算（会員）
+$router->post('/api/member/expedition/{id}/car-expense', 'ExpeditionCarExpenseController@memberSubmit');
 
 // デバッグ用（確認後削除）
 $router->get('/debug-member', 'MemberPortalController@debugMember');
