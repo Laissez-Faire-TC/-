@@ -344,8 +344,10 @@ $router->post('/api/expeditions/{id}/booklet', 'ExpeditionBookletController@save
 $router->get('/public/expedition-booklet/{token}', 'ExpeditionBookletController@viewPublicBooklet');
 
 // エクスポート
-$router->get('/api/expeditions/{id}/export/xlsx', 'ExpeditionExportController@xlsx');
-$router->get('/api/expeditions/{id}/export/pdf',  'ExpeditionExportController@pdf');
+$router->get('/api/expeditions/{id}/export/xlsx',           'ExpeditionExportController@xlsx');
+$router->get('/api/expeditions/{id}/export/pdf',            'ExpeditionExportController@pdf');
+$router->get('/api/expeditions/{id}/export/activity-meibo', 'ExpeditionExportController@activityMeibo');
+$router->get('/api/expeditions/{id}/export/espajio',         'ExpeditionExportController@espajio');
 
 // レンタカー清算（管理者）- 固定パスを先に登録
 $router->get('/api/expeditions/{id}/car-expenses/settlement',    'ExpeditionCarExpenseController@settlement');

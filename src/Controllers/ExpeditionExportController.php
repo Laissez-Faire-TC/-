@@ -516,4 +516,419 @@ class ExpeditionExportController
 </body>
 </html>';
     }
+
+    /**
+     * 大学向け参加者名簿（合宿・遠征届フォーマット）Excel出力
+     * GET /api/expeditions/{id}/export/activity-meibo
+     */
+    public function activityMeibo(array $params): void
+    {
+        $expedition = Expedition::findById((int)$params['id']);
+        if (!$expedition) Response::error('遠征が見つかりません', 404);
+
+        $db = Database::getInstance();
+
+        // 確定参加者を会員情報と結合して取得
+        $participants = $db->fetchAll(
+            "SELECT ep.member_id,
+                    m.grade, m.gender,
+                    m.name_kanji  AS display_name,
+                    m.faculty     AS display_faculty,
+                    m.department  AS display_department,
+                    m.student_id
+             FROM expedition_participants ep
+             JOIN members m ON m.id = ep.member_id
+             WHERE ep.expedition_id = ?
+               AND ep.status = 'confirmed'
+             ORDER BY m.grade, m.name_kana",
+            [(int)$params['id']]
+        );
+
+        $ROWS_PER_SHEET = 25;
+        $sheetCount     = max(1, (int)ceil(count($participants) / $ROWS_PER_SHEET));
+
+        $spreadsheet = new Spreadsheet();
+
+        for ($sheetIndex = 0; $sheetIndex < $sheetCount; $sheetIndex++) {
+            $sheet = $sheetIndex === 0
+                ? $spreadsheet->getActiveSheet()
+                : $spreadsheet->createSheet($sheetIndex);
+            $sheet->setTitle('名簿' . ($sheetIndex + 1));
+            $sheetParticipants = array_slice($participants, $sheetIndex * $ROWS_PER_SHEET, $ROWS_PER_SHEET);
+            $this->buildMeiboSheet($sheet, $expedition, $sheetParticipants, $sheetIndex);
+        }
+
+        $spreadsheet->setActiveSheetIndex(0);
+
+        $name     = preg_replace('/[\\\\\/:\*\?"<>\|]/', '_', $expedition['name']);
+        $filename = '参加者名簿_' . $name . '.xlsx';
+
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="' . rawurlencode($filename) . '"');
+        header('Cache-Control: max-age=0');
+
+        (new Xlsx($spreadsheet))->save('php://output');
+        exit;
+    }
+
+    /**
+     * 名簿シート1枚分を構築（25行/シート）
+     */
+    private function buildMeiboSheet(
+        \PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $sheet,
+        array $expedition,
+        array $participants,
+        int   $sheetIndex
+    ): void {
+        // 列幅
+        $sheet->getColumnDimension('A')->setWidth(5);
+        $sheet->getColumnDimension('B')->setWidth(22);
+        $sheet->getColumnDimension('C')->setWidth(9);
+        $sheet->getColumnDimension('D')->setWidth(14);
+        $sheet->getColumnDimension('E')->setWidth(22);
+        $sheet->getColumnDimension('F')->setWidth(22);
+        $sheet->getColumnDimension('G')->setWidth(18);
+
+        // タイトル
+        $row = 1;
+        $sheet->setCellValue('A' . $row, '【参加者名簿】');
+        $sheet->mergeCells('A' . $row . ':G' . $row);
+        $sheet->getStyle('A' . $row)->getFont()->setBold(true)->setSize(14);
+        $sheet->getStyle('A' . $row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $sheet->getRowDimension($row)->setRowHeight(22);
+
+        // サブタイトル
+        $row = 2;
+        $sheet->setCellValue('A' . $row, '※所属サークルの登録が完了していることを確認の上、チェックを入れてください。');
+        $sheet->mergeCells('A' . $row . ':G' . $row);
+        $sheet->getStyle('A' . $row)->getFont()->setSize(9);
+        $sheet->getRowDimension($row)->setRowHeight(14);
+
+        // 遠征名・期間
+        $row = 3;
+        $startDate = new \DateTime($expedition['start_date']);
+        $endDate   = new \DateTime($expedition['end_date']);
+        $sheet->setCellValue('A' . $row, $expedition['name']);
+        $sheet->mergeCells('A' . $row . ':D' . $row);
+        $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+        $dateStr = $startDate->format('Y年n月j日') . '〜' . $endDate->format('n月j日');
+        $sheet->setCellValue('E' . $row, $dateStr);
+        $sheet->mergeCells('E' . $row . ':G' . $row);
+        $sheet->getStyle('E' . $row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+        $sheet->getRowDimension($row)->setRowHeight(16);
+
+        // ヘッダー行
+        $row = 5;
+        $headerRow = $row;
+        $sheet->setCellValue('B' . $row, '学　　部');
+        $sheet->setCellValue('C' . $row, '学 年');
+        $sheet->setCellValue('D' . $row, '学 籍 番 号');
+        $sheet->setCellValue('E' . $row, '氏　　　名');
+        $sheet->setCellValue('F' . $row, '備　　　考');
+        $sheet->setCellValue('G' . $row, '所属サークル登録済');
+        $sheet->getStyle('A' . $row . ':G' . $row)->applyFromArray([
+            'font'      => ['bold' => true],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'D9D9D9']],
+        ]);
+        $sheet->getRowDimension($row)->setRowHeight(22);
+
+        // データ行（25行固定）
+        $dataStartRow = $headerRow + 1;
+        for ($i = 0; $i < 25; $i++) {
+            $row       = $dataStartRow + $i;
+            $globalNum = ($sheetIndex * 25) + $i + 1;
+
+            // 5行ごとに番号を表示
+            if ($globalNum % 5 === 0) {
+                $sheet->setCellValue('A' . $row, $globalNum);
+                $sheet->getStyle('A' . $row)->getAlignment()
+                    ->setHorizontal(Alignment::HORIZONTAL_RIGHT)
+                    ->setVertical(Alignment::VERTICAL_CENTER);
+                $sheet->getStyle('A' . $row)->getFont()->setSize(8);
+            }
+
+            $p = $participants[$i] ?? null;
+            if ($p) {
+                $studentId = $p['student_id'] ?? '';
+                $grade = '';
+                if (!empty($studentId)) {
+                    $parser = new StudentIdParserService();
+                    $parsed = $parser->parse($studentId);
+                    if ($parsed['is_valid'] && $parsed['enrollment_year'] !== null) {
+                        $gradeNum = $parser->calculateGrade($parsed['enrollment_year']);
+                        $grade    = $gradeNum . '年';
+                    }
+                }
+                if ($grade === '') {
+                    $gradeNum = $p['grade'] ?? null;
+                    $grade    = ($gradeNum === null) ? '' : (($gradeNum == 0) ? 'OB/OG' : $gradeNum . '年');
+                }
+
+                $sheet->setCellValue('B' . $row, $p['display_faculty'] ?? '');
+                $sheet->setCellValue('C' . $row, $grade);
+                $sheet->setCellValue('D' . $row, $studentId);
+                $sheet->setCellValue('E' . $row, $p['display_name'] ?? '');
+                $sheet->getStyle('C' . $row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                $sheet->getStyle('D' . $row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            }
+
+            $sheet->getRowDimension($row)->setRowHeight(16);
+        }
+
+        // 枠線
+        $tableEnd = $dataStartRow + 24;
+        $sheet->getStyle('A' . $headerRow . ':G' . $tableEnd)->getBorders()
+            ->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+        $sheet->getStyle('A' . $headerRow . ':G' . $headerRow)->getBorders()
+            ->getBottom()->setBorderStyle(Border::BORDER_MEDIUM);
+
+        // 注記
+        $noteRow = $tableEnd + 2;
+        $sheet->setCellValue('A' . $noteRow, '【重要】早稲田大学学生補償制度の適用にあたって、「合宿・遠征届」の参加者名簿に記入した氏名は、三役による「サークル会員名簿」の提出と、各サークル員による所属サークルの登録が完了している必要があります。それを満たさない学生が活動に参加する場合はサークル会員名簿を所定の期間内に追加で提出してください。');
+        $sheet->mergeCells('A' . $noteRow . ':G' . $noteRow);
+        $sheet->getStyle('A' . $noteRow)->getAlignment()->setWrapText(true)->setHorizontal(Alignment::HORIZONTAL_LEFT);
+        $sheet->getStyle('A' . $noteRow)->getFont()->setSize(8);
+        $sheet->getRowDimension($noteRow)->setRowHeight(40);
+
+        $noteRow++;
+        $sheet->setCellValue('A' . $noteRow, 'ただし、新入生をはじめ、サークルへの入会が未定の者が参加する活動の場合は、氏名の前に（新）と付けることでサークル員と区別できるようにしておいてください（その場合、「所属サークル登録済」欄に☑は不要です）。');
+        $sheet->mergeCells('A' . $noteRow . ':G' . $noteRow);
+        $sheet->getStyle('A' . $noteRow)->getAlignment()->setWrapText(true)->setHorizontal(Alignment::HORIZONTAL_LEFT);
+        $sheet->getStyle('A' . $noteRow)->getFont()->setSize(8);
+        $sheet->getRowDimension($noteRow)->setRowHeight(30);
+
+        // 印刷設定
+        $sheet->getPageSetup()
+            ->setOrientation(\PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::ORIENTATION_PORTRAIT)
+            ->setPaperSize(\PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::PAPERSIZE_A4)
+            ->setFitToPage(true)->setFitToWidth(1)->setFitToHeight(0);
+        $sheet->getPageMargins()
+            ->setTop(0.75)->setBottom(0.75)->setLeft(0.7)->setRight(0.7);
+    }
+
+    /**
+     * エスパジオ登録用ファイル（1シート=1チーム）Excel出力
+     * GET /api/expeditions/{id}/export/espajio
+     */
+    public function espajio(array $params): void
+    {
+        $expedition = Expedition::findById((int)$params['id']);
+        if (!$expedition) Response::error('遠征が見つかりません', 404);
+
+        $db    = Database::getInstance();
+        $teams = ExpeditionTeam::findByExpedition((int)$params['id']);
+
+        // チームなしの場合は参加者全員を1チームとして扱う
+        if (empty($teams)) {
+            $all = $db->fetchAll(
+                "SELECT ep.member_id, ep.status,
+                        m.name_kanji, m.name_kana, m.gender, m.grade,
+                        m.birthdate, m.address, m.phone, m.emergency_contact
+                 FROM expedition_participants ep
+                 JOIN members m ON m.id = ep.member_id
+                 WHERE ep.expedition_id = ? AND ep.status = 'confirmed'
+                 ORDER BY m.grade, m.name_kana",
+                [(int)$params['id']]
+            );
+            $teams = [[
+                'name'    => $expedition['name'],
+                'members' => array_map(fn($m) => array_merge($m, ['team_role' => null]), $all),
+            ]];
+        } else {
+            // 各チームメンバーの詳細情報を補完
+            foreach ($teams as &$team) {
+                $enriched = [];
+                foreach ($team['members'] as $tm) {
+                    $m = $db->fetch(
+                        "SELECT m.name_kanji, m.name_kana, m.gender, m.grade,
+                                m.birthdate, m.address, m.phone, m.emergency_contact
+                         FROM members m WHERE m.id = ?",
+                        [(int)$tm['member_id']]
+                    );
+                    if ($m) {
+                        $enriched[] = array_merge($tm, $m);
+                    }
+                }
+                $team['members'] = $enriched;
+            }
+            unset($team);
+        }
+
+        $spreadsheet = new Spreadsheet();
+
+        foreach ($teams as $idx => $team) {
+            $sheet = $idx === 0
+                ? $spreadsheet->getActiveSheet()
+                : $spreadsheet->createSheet($idx);
+            $teamName = mb_substr(preg_replace('/[\\\\\/:\*\?"<>\|]/', '_', $team['name']), 0, 31);
+            $sheet->setTitle($teamName ?: ('チーム' . ($idx + 1)));
+            $this->buildEspajioSheet($sheet, $expedition, $team);
+        }
+
+        $spreadsheet->setActiveSheetIndex(0);
+
+        $name     = preg_replace('/[\\\\\/:\*\?"<>\|]/', '_', $expedition['name']);
+        $filename = 'メンバー登録用ファイル_' . $name . '.xlsx';
+
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="' . rawurlencode($filename) . '"');
+        header('Cache-Control: max-age=0');
+
+        (new Xlsx($spreadsheet))->save('php://output');
+        exit;
+    }
+
+    /**
+     * エスパジオ登録用シート1枚分を構築（1チーム）
+     */
+    private function buildEspajioSheet(
+        \PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $sheet,
+        array $expedition,
+        array $team
+    ): void {
+        $members = $team['members'] ?? [];
+
+        // 列幅
+        $sheet->getColumnDimension('A')->setWidth(14);  // 役割
+        $sheet->getColumnDimension('B')->setWidth(16);  // 名前
+        $sheet->getColumnDimension('C')->setWidth(16);  // フリガナ
+        $sheet->getColumnDimension('D')->setWidth(6);   // 性別
+        $sheet->getColumnDimension('E')->setWidth(6);   // 年齢
+        $sheet->getColumnDimension('F')->setWidth(14);  // 生年月日
+        $sheet->getColumnDimension('G')->setWidth(30);  // 住所
+        $sheet->getColumnDimension('H')->setWidth(16);  // 電話番号
+        $sheet->getColumnDimension('I')->setWidth(16);  // 緊急連絡先
+
+        // タイトル行
+        $row = 1;
+        $sheet->setCellValue('A' . $row, 'TENNIS CAMP espajio OPEN メンバー登録用ファイル（参加者名簿兼保険名簿）');
+        $sheet->mergeCells('A' . $row . ':I' . $row);
+        $sheet->getStyle('A' . $row)->getFont()->setBold(true)->setSize(12);
+        $sheet->getStyle('A' . $row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $sheet->getRowDimension($row)->setRowHeight(22);
+
+        // 登録チーム名・エントリー名・提出期限
+        $row = 3;
+        $sheet->setCellValue('A' . $row, '登録チーム名');
+        $sheet->setCellValue('B' . $row, $team['name']);
+        $sheet->mergeCells('B' . $row . ':E' . $row);
+        $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+
+        $row = 4;
+        $startDate = new \DateTime($expedition['start_date']);
+        $endDate   = new \DateTime($expedition['end_date']);
+        $dateStr   = $startDate->format('Y年n月j日') . '〜' . $endDate->format('n月j日');
+        $sheet->setCellValue('A' . $row, 'エントリー名');
+        $sheet->setCellValue('B' . $row, $expedition['name'] . '　' . $dateStr);
+        $sheet->mergeCells('B' . $row . ':I' . $row);
+        $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+
+        $row = 5;
+        $sheet->setCellValue('A' . $row, '参加選手員数合計');
+        $sheet->setCellValue('B' . $row, count($members) . '名');
+        $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+
+        // ヘッダー行
+        $row = 7;
+        $headerRow = $row;
+        $headers = ['役割', '名前', 'フリガナ', '性別', '年齢', '生年月日', '住所', '電話番号（携帯）', '緊急連絡先'];
+        $cols = ['A','B','C','D','E','F','G','H','I'];
+        foreach ($cols as $ci => $col) {
+            $sheet->setCellValue($col . $row, $headers[$ci]);
+        }
+        $sheet->getStyle('A' . $row . ':I' . $row)->applyFromArray([
+            'font'      => ['bold' => true],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'D9D9D9']],
+        ]);
+        $sheet->getRowDimension($row)->setRowHeight(20);
+
+        // データ行
+        $dataStartRow = $headerRow + 1;
+        $maxRows = max(count($members), 15); // 最低15行確保
+        for ($i = 0; $i < $maxRows; $i++) {
+            $row = $dataStartRow + $i;
+            $p   = $members[$i] ?? null;
+
+            // 役割ラベル
+            if ($p) {
+                if ($i === 0) {
+                    $roleLabel = 'キャプテン';
+                } elseif (($p['gender'] ?? '') === 'female') {
+                    $roleLabel = 'マネージャー';
+                } else {
+                    $roleLabel = '選手';
+                }
+
+                // 年齢計算
+                $age = '';
+                if (!empty($p['birthdate'])) {
+                    try {
+                        $birth = new \DateTime($p['birthdate']);
+                        $today = new \DateTime();
+                        $age   = (string)$today->diff($birth)->y;
+                    } catch (\Exception $e) {}
+                }
+
+                // 生年月日フォーマット
+                $birthStr = '';
+                if (!empty($p['birthdate'])) {
+                    try {
+                        $birthStr = (new \DateTime($p['birthdate']))->format('Y/n/j');
+                    } catch (\Exception $e) {}
+                }
+
+                // 性別
+                $genderLabel = ($p['gender'] ?? '') === 'male' ? '男' : (($p['gender'] ?? '') === 'female' ? '女' : '');
+
+                $sheet->setCellValue('A' . $row, $roleLabel);
+                $sheet->setCellValue('B' . $row, $p['name_kanji'] ?? '');
+                $sheet->setCellValue('C' . $row, $p['name_kana']  ?? '');
+                $sheet->setCellValue('D' . $row, $genderLabel);
+                $sheet->setCellValue('E' . $row, $age);
+                $sheet->setCellValue('F' . $row, $birthStr);
+                $sheet->setCellValue('G' . $row, $p['address'] ?? '');
+                $sheet->setCellValue('H' . $row, $p['phone'] ?? '');
+                $sheet->setCellValue('I' . $row, $p['emergency_contact'] ?? '');
+
+                // 中央揃え列
+                foreach (['A','D','E','F'] as $c) {
+                    $sheet->getStyle($c . $row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                }
+                $sheet->getStyle('G' . $row)->getAlignment()->setWrapText(true);
+
+                // キャプテン行を薄い黄色に
+                if ($i === 0) {
+                    $sheet->getStyle('A' . $row . ':I' . $row)->getFill()
+                        ->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FFFDE7');
+                }
+            }
+
+            $sheet->getRowDimension($row)->setRowHeight(18);
+        }
+
+        // 枠線
+        $tableEnd = $dataStartRow + $maxRows - 1;
+        $sheet->getStyle('A' . $headerRow . ':I' . $tableEnd)->getBorders()
+            ->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+        $sheet->getStyle('A' . $headerRow . ':I' . $headerRow)->getBorders()
+            ->getBottom()->setBorderStyle(Border::BORDER_MEDIUM);
+
+        // 注記
+        $noteRow = $tableEnd + 2;
+        $sheet->setCellValue('A' . $noteRow, '※各登録エントリーの役職、チームと立場に基づいて参加登録情報をご入力ください。ご不明な点はこちらのページをご参考ください。');
+        $sheet->mergeCells('A' . $noteRow . ':I' . $noteRow);
+        $sheet->getStyle('A' . $noteRow)->getFont()->setSize(8);
+        $sheet->getStyle('A' . $noteRow)->getAlignment()->setWrapText(true);
+        $sheet->getRowDimension($noteRow)->setRowHeight(20);
+
+        // 印刷設定（横向きA4）
+        $sheet->getPageSetup()
+            ->setOrientation(\PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::ORIENTATION_LANDSCAPE)
+            ->setPaperSize(\PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::PAPERSIZE_A4)
+            ->setFitToPage(true)->setFitToWidth(1)->setFitToHeight(0);
+        $sheet->getPageMargins()
+            ->setTop(0.75)->setBottom(0.75)->setLeft(0.7)->setRight(0.7);
+    }
 }

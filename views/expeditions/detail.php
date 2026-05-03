@@ -55,6 +55,12 @@
                 <a class="btn btn-outline-danger btn-sm" id="btnExportPdf" href="#" target="_blank">
                     <i class="bi bi-file-earmark-pdf"></i> PDF
                 </a>
+                <a class="btn btn-outline-secondary btn-sm" id="btnExportMeibo" href="#" target="_blank">
+                    <i class="bi bi-file-earmark-spreadsheet"></i> 参加者名簿
+                </a>
+                <a class="btn btn-outline-info btn-sm" id="btnExportEspajio" href="#" target="_blank">
+                    <i class="bi bi-file-earmark-excel"></i> エスパジオ登録
+                </a>
                 <button class="btn btn-primary btn-sm" onclick="showAddParticipantModal()">+ 参加者を追加</button>
             </div>
         </div>
@@ -109,14 +115,6 @@
             </div>
         </div>
 
-        <!-- 清算サマリー -->
-        <div class="mt-4">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <h5>清算サマリー</h5>
-                <button class="btn btn-outline-primary btn-sm" onclick="calcSettlement()">清算を計算</button>
-            </div>
-            <div id="settlementResult"></div>
-        </div>
     </div>
 
     <!-- ===== タブ4: チーム分け ===== -->
@@ -312,35 +310,6 @@
     </div>
 </div>
 
-<!-- ===== 立替者追加モーダル ===== -->
-<div class="modal fade" id="addCarPayerModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">立替者を追加</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div class="mb-3">
-                    <label class="form-label">参加者</label>
-                    <select class="form-select" id="carPayerSelect"></select>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">立替金額</label>
-                    <div class="input-group">
-                        <span class="input-group-text">¥</span>
-                        <input type="number" class="form-control" id="carPayerAmount" min="0" value="0">
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
-                <button type="button" class="btn btn-primary" onclick="addCarPayer()">追加</button>
-            </div>
-        </div>
-    </div>
-</div>
-
 <!-- ===== チーム追加モーダル ===== -->
 <div class="modal fade" id="addTeamModal" tabindex="-1">
     <div class="modal-dialog">
@@ -466,7 +435,6 @@ document.addEventListener('DOMContentLoaded', () => {
     addCarModal         = new bootstrap.Modal(document.getElementById('addCarModal'));
     carAutoAssignModal  = new bootstrap.Modal(document.getElementById('carAutoAssignModal'));
     addCarMemberModal   = new bootstrap.Modal(document.getElementById('addCarMemberModal'));
-    addCarPayerModal    = new bootstrap.Modal(document.getElementById('addCarPayerModal'));
     addTeamModal        = new bootstrap.Modal(document.getElementById('addTeamModal'));
     autoAssignModal       = new bootstrap.Modal(document.getElementById('autoAssignModal'));
     autoAssignReturnModal = new bootstrap.Modal(document.getElementById('autoAssignReturnModal'));
@@ -672,8 +640,10 @@ async function loadParticipants() {
             participantsCache = data.data || [];
             renderParticipants(participantsCache);
             // エクスポートボタンのURLをセット
-            document.getElementById('btnExportXlsx').href = `/api/expeditions/${expeditionId}/export/xlsx`;
-            document.getElementById('btnExportPdf').href  = `/api/expeditions/${expeditionId}/export/pdf`;
+            document.getElementById('btnExportXlsx').href  = `/api/expeditions/${expeditionId}/export/xlsx`;
+            document.getElementById('btnExportPdf').href   = `/api/expeditions/${expeditionId}/export/pdf`;
+            document.getElementById('btnExportMeibo').href   = `/api/expeditions/${expeditionId}/export/activity-meibo`;
+            document.getElementById('btnExportEspajio').href = `/api/expeditions/${expeditionId}/export/espajio`;
         } else {
             document.getElementById('participantList').innerHTML = '<div class="alert alert-danger">読み込みに失敗しました</div>';
         }
@@ -1045,27 +1015,11 @@ function renderCarList(cars, tripType) {
                     </select>
                 </td>
                 <td class="text-center small text-muted">${col3}</td>
-                <td class="text-center">
-                    <input type="checkbox" ${(m.is_excluded || m.exclude_settlement) ? 'checked' : ''}
-                        onchange="updateCarMember(${car.id}, ${m.id}, 'is_excluded', this.checked ? 1 : 0)"
-                        title="清算対象外">
-                </td>
                 <td>
                     <button class="btn btn-outline-danger btn-sm py-0" onclick="deleteCarMember(${car.id}, ${m.id})">削除</button>
                 </td>
             </tr>
         `; }).join('');
-
-        // 立替者リスト
-        const payersHtml = (car.car_payers || []).map(p => `
-            <tr>
-                <td>${escapeHtml(p.name_kanji)}</td>
-                <td>¥${Number(p.amount).toLocaleString()}</td>
-                <td>
-                    <button class="btn btn-outline-danger btn-sm py-0" onclick="deleteCarPayer(${car.id}, ${p.id})">削除</button>
-                </td>
-            </tr>
-        `).join('');
 
         const depLabel  = (car.trip_type === 'outbound' && car.departure_class != null)
             ? `<span class="badge bg-success ms-1">${car.departure_class == 0 ? '早出' : car.departure_class + '限後出発'}</span>`
@@ -1095,7 +1049,6 @@ function renderCarList(cars, tripType) {
                                     <th>名前</th>
                                     <th>役割</th>
                                     <th class="text-center">${isReturn ? '推奨下車駅 / 最寄り駅' : '時限'}</th>
-                                    <th class="text-center" title="清算対象外">対象外</th>
                                     <th></th>
                                 </tr>
                             </thead>
@@ -1104,20 +1057,6 @@ function renderCarList(cars, tripType) {
                     </div>
                     <button class="btn btn-outline-primary btn-sm mb-3" onclick="showAddCarMemberModal(${car.id})">+ 乗員を追加</button>
 
-                    <h6 class="mt-2">立替者</h6>
-                    <div class="table-responsive">
-                        <table class="table table-sm">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>名前</th>
-                                    <th>金額</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody>${payersHtml || '<tr><td colspan="3" class="text-muted">立替者なし</td></tr>'}</tbody>
-                        </table>
-                    </div>
-                    <button class="btn btn-outline-secondary btn-sm" onclick="showAddCarPayerModal(${car.id})">+ 立替者を追加</button>
                 </div>
             </div>
         `;
@@ -1542,110 +1481,6 @@ async function deleteCarMember(cid, mid) {
     } catch (err) {
         alert('通信エラーが発生しました');
     }
-}
-
-function showAddCarPayerModal(cid) {
-    currentCarId = cid;
-    const sel = document.getElementById('carPayerSelect');
-    sel.innerHTML = participantsCache.map(p =>
-        `<option value="${p.member_id}">${escapeHtml(p.name_kanji)}</option>`
-    ).join('');
-    document.getElementById('carPayerAmount').value = '0';
-    addCarPayerModal.show();
-}
-
-async function addCarPayer() {
-    const pid    = document.getElementById('carPayerSelect').value;
-    const amount = parseInt(document.getElementById('carPayerAmount').value) || 0;
-    if (!pid) { alert('参加者を選択してください'); return; }
-
-    try {
-        const res    = await fetch(`/api/expeditions/${expeditionId}/cars/${currentCarId}/payers`, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ member_id: parseInt(pid), amount }),
-        });
-        const result = await res.json();
-        if (result.success) {
-            addCarPayerModal.hide();
-            carsLoaded = false;
-            await loadCars();
-            showToast('立替者を追加しました');
-        } else {
-            alert(result.error?.message || '追加に失敗しました');
-        }
-    } catch (err) {
-        alert('通信エラーが発生しました');
-    }
-}
-
-async function deleteCarPayer(cid, pid) {
-    if (!confirm('立替者を削除しますか？')) return;
-
-    try {
-        const res    = await fetch(`/api/expeditions/${expeditionId}/cars/${cid}/payers/${pid}`, { method: 'DELETE' });
-        const result = await res.json();
-        if (result.success) {
-            carsLoaded = false;
-            await loadCars();
-            showToast('削除しました');
-        } else {
-            alert(result.error?.message || '削除に失敗しました');
-        }
-    } catch (err) {
-        alert('通信エラーが発生しました');
-    }
-}
-
-// 清算計算
-async function calcSettlement() {
-    const el = document.getElementById('settlementResult');
-    el.innerHTML = '<div class="text-muted">計算中...</div>';
-
-    try {
-        const res  = await fetch(`/api/expeditions/${expeditionId}/cars/settlement`);
-        const data = await res.json();
-        if (data.success) {
-            renderSettlement(data.data);
-        } else {
-            el.innerHTML = '<div class="alert alert-danger">計算に失敗しました</div>';
-        }
-    } catch (err) {
-        el.innerHTML = '<div class="alert alert-danger">通信エラーが発生しました</div>';
-    }
-}
-
-function renderSettlement(settlement) {
-    const el = document.getElementById('settlementResult');
-
-    const detailRows = (settlement.details || []).map(d => {
-        const amount = d.amount;
-        const badge  = amount >= 0
-            ? `<span class="badge bg-danger">支払い ¥${Number(amount).toLocaleString()}</span>`
-            : `<span class="badge bg-success">返金 ¥${Number(-amount).toLocaleString()}</span>`;
-        return `<tr><td>${escapeHtml(d.name_kanji)}</td><td>${badge}</td></tr>`;
-    }).join('');
-
-    el.innerHTML = `
-        <div class="card">
-            <div class="card-header">清算結果</div>
-            <div class="card-body">
-                <div class="row mb-3">
-                    <div class="col-md-4"><strong>総費用:</strong> ¥${Number(settlement.total_cost || 0).toLocaleString()}</div>
-                    <div class="col-md-4"><strong>対象人数:</strong> ${settlement.target_count || 0}人</div>
-                    <div class="col-md-4"><strong>1人あたり:</strong> ¥${Number(settlement.per_person || 0).toLocaleString()}</div>
-                </div>
-                <div class="table-responsive">
-                    <table class="table table-sm">
-                        <thead class="table-light">
-                            <tr><th>名前</th><th>支払い/返金</th></tr>
-                        </thead>
-                        <tbody>${detailRows || '<tr><td colspan="2" class="text-muted">データなし</td></tr>'}</tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    `;
 }
 
 // ==============================
