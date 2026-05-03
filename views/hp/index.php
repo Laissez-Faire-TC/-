@@ -98,33 +98,6 @@
 
         <!-- ========== News タブ ========== -->
         <div class="tab-pane fade" id="tabNews">
-            <div class="card mb-3">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <strong>クイックニュース（ヘッダー直下の帯）</strong>
-                    <button class="btn btn-primary btn-sm" onclick="saveQuickNews()">保存</button>
-                </div>
-                <div class="card-body">
-                    <div id="quickNewsRows">
-                        <?php
-                        $quickNews = json_decode($settings['quick_news'] ?? '[]', true) ?: [];
-                        foreach ($quickNews as $qn): ?>
-                        <div class="row g-2 mb-2 quick-news-row">
-                            <div class="col-9">
-                                <input type="text" class="form-control" placeholder="表示テキスト" value="<?= htmlspecialchars($qn['text']) ?>">
-                            </div>
-                            <div class="col-2">
-                                <input type="text" class="form-control" placeholder="アンカーID" value="<?= htmlspecialchars($qn['anchor'] ?? '') ?>">
-                            </div>
-                            <div class="col-1">
-                                <button class="btn btn-outline-danger btn-sm w-100" onclick="removeRow(this)">✕</button>
-                            </div>
-                        </div>
-                        <?php endforeach; ?>
-                    </div>
-                    <button class="btn btn-outline-secondary btn-sm mt-1" onclick="addQuickNewsRow()">+ 行を追加</button>
-                </div>
-            </div>
-
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <strong>ニュースカード一覧</strong>
@@ -137,7 +110,6 @@
                                 <th>日付</th>
                                 <th>タイトル</th>
                                 <th>アンカーID</th>
-                                <th>クイック</th>
                                 <th>順序</th>
                                 <th></th>
                             </tr>
@@ -148,7 +120,6 @@
                                 <td><?= htmlspecialchars($n['news_date']) ?></td>
                                 <td><?= htmlspecialchars($n['title']) ?></td>
                                 <td><code><?= htmlspecialchars($n['anchor_id'] ?? '') ?></code></td>
-                                <td><?= $n['is_quick_news'] ? '<span class="badge bg-success">◎</span>' : '' ?></td>
                                 <td><?= (int)$n['sort_order'] ?></td>
                                 <td>
                                     <button class="btn btn-sm btn-outline-primary me-1" onclick="openNewsModal(<?= $n['id'] ?>)">編集</button>
@@ -303,14 +274,6 @@
                         <label class="form-label">表示順</label>
                         <input type="number" class="form-control" id="newsSortOrder" value="0">
                     </div>
-                    <div class="col-md-6 d-flex align-items-end">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="newsIsQuick">
-                            <label class="form-check-label" for="newsIsQuick">
-                                クイックニュース帯に表示
-                            </label>
-                        </div>
-                    </div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -430,34 +393,6 @@ async function saveAbout() {
 }
 
 // ─────────────────────────────────────────
-// クイックニュース
-// ─────────────────────────────────────────
-function addQuickNewsRow() {
-    document.getElementById('quickNewsRows').insertAdjacentHTML('beforeend', `
-        <div class="row g-2 mb-2 quick-news-row">
-            <div class="col-9"><input type="text" class="form-control" placeholder="表示テキスト"></div>
-            <div class="col-2"><input type="text" class="form-control" placeholder="アンカーID"></div>
-            <div class="col-1"><button class="btn btn-outline-danger btn-sm w-100" onclick="removeRow(this)">✕</button></div>
-        </div>`);
-}
-
-async function saveQuickNews() {
-    const rows = [];
-    document.querySelectorAll('.quick-news-row').forEach(row => {
-        const inputs = row.querySelectorAll('input');
-        if (inputs[0].value.trim()) {
-            rows.push({ text: inputs[0].value, anchor: inputs[1].value });
-        }
-    });
-    try {
-        const d = await apiPut('/api/hp/settings', { quick_news: JSON.stringify(rows) });
-        showToast(d.success ? '保存しました' : (d.error?.message || 'エラー'), d.success ? 'success' : 'danger');
-    } catch (err) {
-        showToast('通信エラー: ' + err.message, 'danger');
-    }
-}
-
-// ─────────────────────────────────────────
 // ニュース管理
 // ─────────────────────────────────────────
 let _allNews = <?= json_encode($news, JSON_UNESCAPED_UNICODE) ?>;
@@ -484,7 +419,6 @@ function openNewsModal(id) {
         document.getElementById('newsImage').value = '';
         document.getElementById('newsAnchor').value = '';
         document.getElementById('newsSortOrder').value = '0';
-        document.getElementById('newsIsQuick').checked = false;
         updateNewsImagePreview('');
     } else {
         const item = _allNews.find(n => n.id == id);
@@ -497,7 +431,6 @@ function openNewsModal(id) {
         document.getElementById('newsImage').value = item.image_path || '';
         document.getElementById('newsAnchor').value = item.anchor_id || '';
         document.getElementById('newsSortOrder').value = item.sort_order;
-        document.getElementById('newsIsQuick').checked = !!parseInt(item.is_quick_news);
         updateNewsImagePreview(item.image_path || '');
     }
     modal.show();
@@ -516,7 +449,6 @@ async function saveNews() {
         image_path:    document.getElementById('newsImage').value || null,
         anchor_id:     document.getElementById('newsAnchor').value || null,
         sort_order:    parseInt(document.getElementById('newsSortOrder').value) || 0,
-        is_quick_news: document.getElementById('newsIsQuick').checked ? 1 : 0,
     };
 
     try {

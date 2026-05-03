@@ -1,76 +1,81 @@
 <?php
-if (!class_exists('ExpeditionToken')) {
+/**
+ * 遠征申し込みURLトークンモデル
+ */
+class ExpeditionToken
+{
     /**
-     * 遠征申し込みURLトークンモデル
+     * 遠征IDでトークンを取得
      */
-    class ExpeditionToken
+    public static function findByExpedition(int $expedition_id): ?array
     {
-        private Database $db;
+        return Database::getInstance()->fetch(
+            "SELECT * FROM expedition_tokens WHERE expedition_id = ?",
+            [$expedition_id]
+        );
+    }
 
-        public function __construct()
-        {
-            $this->db = Database::getInstance();
-        }
+    /**
+     * トークン文字列で取得
+     * ※expires_at の有効期限チェックは呼び出し元で行う
+     */
+    public static function findByToken(string $token): ?array
+    {
+        return Database::getInstance()->fetch(
+            "SELECT * FROM expedition_tokens WHERE token = ?",
+            [$token]
+        );
+    }
 
-        /**
-         * 遠征IDでトークンを取得
-         */
-        public function findByExpedition(int $expedition_id): ?array
-        {
-            return $this->db->fetch(
-                "SELECT * FROM expedition_tokens WHERE expedition_id = ?",
-                [$expedition_id]
-            );
-        }
+    /**
+     * トークンを生成する
+     * 既存トークンを削除してから新しいトークンをINSERTし、作成した行を返す
+     */
+    public static function generate(int $expedition_id): ?array
+    {
+        $db = Database::getInstance();
 
-        /**
-         * トークン文字列で取得
-         * ※expires_at の有効期限チェックは呼び出し元で行う
-         */
-        public function findByToken(string $token): ?array
-        {
-            return $this->db->fetch(
-                "SELECT * FROM expedition_tokens WHERE token = ?",
-                [$token]
-            );
-        }
+        // 既存トークンを削除
+        $db->execute("DELETE FROM expedition_tokens WHERE expedition_id = ?", [$expedition_id]);
 
-        /**
-         * トークンを生成する
-         * 既存トークンを削除してから新しいトークンをINSERTし、作成した行を返す
-         */
-        public function generate(int $expedition_id): ?array
-        {
-            // 既存トークンを削除
-            $this->db->execute(
-                "DELETE FROM expedition_tokens WHERE expedition_id = ?",
-                [$expedition_id]
-            );
+        // 64文字の16進数トークンを生成
+        $token = bin2hex(random_bytes(32));
 
-            // 64文字の16進数トークンを生成
-            $token = bin2hex(random_bytes(32));
+        // 有効期限は現在時刻から30日後
+        $expiresAt = date('Y-m-d H:i:s', strtotime('+30 days'));
 
-            // 有効期限は現在時刻から30日後
-            $expiresAt = date('Y-m-d H:i:s', strtotime('+30 days'));
+        $db->insert(
+            "INSERT INTO expedition_tokens (expedition_id, token, expires_at) VALUES (?, ?, ?)",
+            [$expedition_id, $token, $expiresAt]
+        );
 
-            $this->db->insert(
-                "INSERT INTO expedition_tokens (expedition_id, token, expires_at) VALUES (?, ?, ?)",
-                [$expedition_id, $token, $expiresAt]
-            );
+        return self::findByExpedition($expedition_id);
+    }
 
-            // 作成した行を返す
-            return $this->findByExpedition($expedition_id);
-        }
+    /**
+     * 有効期限内のトークンを持つ遠征一覧を取得（会員ホーム表示用）
+     */
+    public static function getActiveExpeditionsWithTokens(): array
+    {
+        return Database::getInstance()->fetchAll(
+            "SELECT et.token, et.expires_at, e.*
+             FROM expedition_tokens et
+             JOIN expeditions e ON e.id = et.expedition_id
+             WHERE (et.expires_at IS NULL OR et.expires_at > NOW())
+               AND (e.deadline IS NULL OR e.deadline >= CURDATE())
+             ORDER BY e.start_date ASC",
+            []
+        );
+    }
 
-        /**
-         * 遠征IDに紐づくトークンを削除
-         */
-        public function delete(int $expedition_id): bool
-        {
-            return $this->db->execute(
-                "DELETE FROM expedition_tokens WHERE expedition_id = ?",
-                [$expedition_id]
-            ) > 0;
-        }
+    /**
+     * 遠征IDに紐づくトークンを削除
+     */
+    public static function delete(int $expedition_id): bool
+    {
+        return Database::getInstance()->execute(
+            "DELETE FROM expedition_tokens WHERE expedition_id = ?",
+            [$expedition_id]
+        ) > 0;
     }
 }

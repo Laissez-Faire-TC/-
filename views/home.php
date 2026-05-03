@@ -200,11 +200,13 @@
     <div id="newsModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeNewsModal()">&times;</span>
-            <img id="modalImg" src="" alt="モーダル画像">
-            <div class="modal-text">
-                <span id="modalDate" class="date"></span>
-                <h3 id="modalTitle"></h3>
-                <p id="modalDesc"></p>
+            <div class="modal-body">
+                <img id="modalImg" src="" alt="モーダル画像">
+                <div class="modal-text">
+                    <span id="modalDate" class="date"></span>
+                    <h3 id="modalTitle"></h3>
+                    <p id="modalDesc"></p>
+                </div>
             </div>
         </div>
     </div>

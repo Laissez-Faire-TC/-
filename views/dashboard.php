@@ -155,6 +155,17 @@ function updateBadge() {
         </a>
     </div>
     <div class="col-md-4 col-sm-6">
+        <a href="/expeditions" class="dashboard-card card shadow-sm h-100 text-decoration-none">
+            <div class="card-body d-flex align-items-center gap-3 p-4">
+                <div class="dashboard-icon text-primary"><i class="bi bi-geo-alt"></i></div>
+                <div>
+                    <h5 class="mb-1">遠征管理</h5>
+                    <small class="text-muted">遠征の作成・車割・チーム分け・集金管理</small>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-4 col-sm-6">
         <a href="/events" class="dashboard-card card shadow-sm h-100 text-decoration-none">
             <div class="card-body d-flex align-items-center gap-3 p-4">
                 <div class="dashboard-icon text-primary"><i class="bi bi-calendar-event"></i></div>

@@ -5,6 +5,7 @@
 class Router
 {
     private array $routes = [];
+    private string $resolvedUri = '/';
 
     public function get(string $path, string $handler): void
     {
@@ -64,6 +65,9 @@ class Router
             }
         }
 
+        // 解決後のURIを保持（isApiRequest等で使用）
+        $this->resolvedUri = $uri;
+
         // PUT/DELETEのオーバーライド
         if ($method === 'POST' && isset($_POST['_method'])) {
             $method = strtoupper($_POST['_method']);
@@ -113,7 +117,15 @@ class Router
             return;
         }
 
-        $controller->$method($params);
+        try {
+            $controller->$method($params);
+        } catch (Throwable $e) {
+            if ($this->isApiRequest()) {
+                Response::error('サーバーエラー: ' . $e->getMessage(), 500);
+            } else {
+                throw $e;
+            }
+        }
     }
 
     private function notFound(): void
@@ -128,7 +140,6 @@ class Router
 
     private function isApiRequest(): bool
     {
-        $uri = $_SERVER['REQUEST_URI'];
-        return strpos($uri, '/api/') === 0;
+        return strpos($this->resolvedUri, '/api/') === 0;
     }
 }

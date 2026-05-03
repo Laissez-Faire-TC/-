@@ -228,32 +228,50 @@ class ChatbotService
             'messages' => $messages
         ];
 
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => json_encode($data),
-            CURLOPT_HTTPHEADER => [
-                'Content-Type: application/json',
-                'x-api-key: ' . $this->apiKey,
-                'anthropic-version: 2023-06-01'
-            ],
-            CURLOPT_TIMEOUT => 30
-        ]);
+        $maxRetries = 3;
+        $response = null;
+        $httpCode  = 0;
 
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $error = curl_error($ch);
-        curl_close($ch);
+        for ($attempt = 0; $attempt < $maxRetries; $attempt++) {
+            if ($attempt > 0) {
+                sleep((int)(2 ** $attempt)); // 2秒→4秒 の指数バックオフ
+            }
 
-        if ($error) {
-            throw new Exception('API接続エラー: ' . $error);
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => json_encode($data),
+                CURLOPT_HTTPHEADER     => [
+                    'Content-Type: application/json',
+                    'x-api-key: ' . $this->apiKey,
+                    'anthropic-version: 2023-06-01'
+                ],
+                CURLOPT_TIMEOUT => 30
+            ]);
+
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $error    = curl_error($ch);
+            curl_close($ch);
+
+            if ($error) {
+                throw new Exception('API接続エラー: ' . $error);
+            }
+
+            // 429/529 はリトライ対象
+            if ($httpCode === 429 || $httpCode === 529) {
+                continue;
+            }
+
+            break;
         }
 
         if ($httpCode !== 200) {
-            $errorData = json_decode($response, true);
+            $errorData    = json_decode($response, true);
             $errorMessage = $errorData['error']['message'] ?? 'Unknown error';
-            throw new Exception('API エラー (' . $httpCode . '): ' . $errorMessage);
+            $suffix = ($httpCode === 429 || $httpCode === 529) ? '（混雑しています。しばらく待ってから再度お試しください）' : '';
+            throw new Exception('API エラー (' . $httpCode . '): ' . $errorMessage . $suffix);
         }
 
         $result = json_decode($response, true);

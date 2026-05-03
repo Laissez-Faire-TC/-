@@ -1,148 +1,148 @@
 <?php
 /**
  * 遠征しおりモデル
+ * expedition_booklets.items に JSON として保存する
  */
 class ExpeditionBooklet
 {
-    private Database $db;
-
-    /** JSONとして保存するフィールド一覧 */
-    private const JSON_FIELDS = [
-        'packing_list',
-        'car_assignment',
-        'team_assignment',
-        'room_assignment',
-    ];
-
-    public function __construct()
+    /** デフォルト値 */
+    private static function defaults(): array
     {
-        $this->db = Database::getInstance();
+        return [
+            'venue'            => '',
+            'meeting_note'     => '',
+            'items_to_bring'   => [],
+            'car_assignment'   => '',
+            'team_assignment'  => '',
+            'room_assignments' => [],
+            'notes'            => '',
+        ];
     }
 
     /**
      * 遠征IDでしおりを取得する
      */
-    public function findByExpedition(int $expedition_id): ?array
+    public static function findByExpedition(int $expedition_id): ?array
     {
-        $row = $this->db->fetch(
+        $row = Database::getInstance()->fetch(
             "SELECT * FROM expedition_booklets WHERE expedition_id = ?",
             [$expedition_id]
         );
 
-        if (!$row) {
-            return null;
-        }
-
-        return $this->decode($row);
+        return $row ? self::decode($row) : null;
     }
 
     /**
      * しおりを保存する（UPSERTパターン）
-     *
-     * @param int   $expedition_id 遠征ID
-     * @param array $items         保存内容（packing_list, car_assignment, team_assignment, room_assignment）
-     * @return array|null 保存後の行
+     * $data: フラットな連想配列（meeting_time, items_to_bring[] など）
      */
-    public function save(int $expedition_id, array $items): ?array
+    public static function save(int $expedition_id, array $data): ?array
     {
-        // JSONエンコード
-        $encoded = [];
-        foreach (self::JSON_FIELDS as $field) {
-            if (array_key_exists($field, $items)) {
-                $val = $items[$field];
-                // 配列の場合はJSONにエンコード、文字列はそのまま保存
-                if (is_array($val)) {
-                    $encoded[$field] = json_encode($val, JSON_UNESCAPED_UNICODE);
-                } else {
-                    $encoded[$field] = $val;
-                }
+        $db       = Database::getInstance();
+        $defaults = self::defaults();
+
+        // 許可フィールドのみ抽出
+        $filtered = [];
+        foreach ($defaults as $field => $default) {
+            $filtered[$field] = $data[$field] ?? $default;
+        }
+
+        // 配列フィールドは配列として保証
+        foreach (['items_to_bring', 'schedules', 'room_assignments'] as $f) {
+            if (!is_array($filtered[$f])) {
+                $filtered[$f] = [];
             }
         }
 
-        $existing = $this->db->fetch(
+        $encoded  = json_encode($filtered, JSON_UNESCAPED_UNICODE);
+        $existing = $db->fetch(
             "SELECT id FROM expedition_booklets WHERE expedition_id = ?",
             [$expedition_id]
         );
 
         if ($existing) {
-            // 既存レコードを更新
-            if (!empty($encoded)) {
-                $sets = implode(', ', array_map(fn($f) => "{$f} = ?", array_keys($encoded)));
-                $values = array_values($encoded);
-                $values[] = $expedition_id;
-                $this->db->execute(
-                    "UPDATE expedition_booklets SET {$sets} WHERE expedition_id = ?",
-                    $values
-                );
-            }
+            $db->execute(
+                "UPDATE expedition_booklets SET items = ? WHERE expedition_id = ?",
+                [$encoded, $expedition_id]
+            );
         } else {
-            // 新規レコードを挿入
-            $encoded['expedition_id'] = $expedition_id;
-            $cols = implode(', ', array_keys($encoded));
-            $placeholders = implode(', ', array_fill(0, count($encoded), '?'));
-            $this->db->insert(
-                "INSERT INTO expedition_booklets ({$cols}) VALUES ({$placeholders})",
-                array_values($encoded)
+            $db->insert(
+                "INSERT INTO expedition_booklets (expedition_id, items) VALUES (?, ?)",
+                [$expedition_id, $encoded]
             );
         }
 
-        return $this->findByExpedition($expedition_id);
+        return self::findByExpedition($expedition_id);
     }
 
     /**
-     * しおりを公開する
-     * public_tokenを生成してpublished=1に更新する
-     *
-     * @param int $expedition_id 遠征ID
-     * @return array|null 更新後の行
+     * しおりを公開する（レコードが存在しない場合は新規作成）
      */
-    public function publish(int $expedition_id): ?array
+    public static function publish(int $expedition_id): ?array
     {
-        // ランダムな公開トークンを生成
+        $db           = Database::getInstance();
         $public_token = bin2hex(random_bytes(16));
 
-        $this->db->execute(
-            "UPDATE expedition_booklets SET published = 1, public_token = ? WHERE expedition_id = ?",
-            [$public_token, $expedition_id]
+        $existing = $db->fetch(
+            "SELECT id FROM expedition_booklets WHERE expedition_id = ?",
+            [$expedition_id]
         );
 
-        return $this->findByExpedition($expedition_id);
+        if ($existing) {
+            $db->execute(
+                "UPDATE expedition_booklets SET published = 1, public_token = ? WHERE expedition_id = ?",
+                [$public_token, $expedition_id]
+            );
+        } else {
+            $db->insert(
+                "INSERT INTO expedition_booklets (expedition_id, items, published, public_token) VALUES (?, ?, 1, ?)",
+                [$expedition_id, json_encode(self::defaults(), JSON_UNESCAPED_UNICODE), $public_token]
+            );
+        }
+
+        return self::findByExpedition($expedition_id);
     }
 
     /**
-     * 公開トークンでしおりを取得する（公開中のみ）
-     *
-     * @param string $token 公開トークン
-     * @return array|null しおりデータ
+     * 公開トークンでしおりを取得する（公開中のみ、遠征情報込み）
      */
-    public function findByPublicToken(string $token): ?array
+    public static function findByPublicToken(string $token): ?array
     {
-        $row = $this->db->fetch(
-            "SELECT * FROM expedition_booklets WHERE public_token = ? AND published = 1",
+        $row = Database::getInstance()->fetch(
+            "SELECT eb.*, e.name AS expedition_name, e.start_date, e.end_date
+             FROM expedition_booklets eb
+             JOIN expeditions e ON e.id = eb.expedition_id
+             WHERE eb.public_token = ? AND eb.published = 1",
             [$token]
         );
 
-        if (!$row) {
-            return null;
-        }
-
-        return $this->decode($row);
+        return $row ? self::decode($row) : null;
     }
 
     /**
-     * JSONフィールドをデコードする
+     * items JSONをデコードしてトップレベルにマージする
      */
-    private function decode(array $row): array
+    private static function decode(array $row): array
     {
-        foreach (self::JSON_FIELDS as $field) {
-            if (isset($row[$field]) && is_string($row[$field])) {
-                // JSON文字列の場合はデコード、失敗時はそのまま返す
-                $decoded = json_decode($row[$field], true);
-                if (json_last_error() === JSON_ERROR_NONE) {
-                    $row[$field] = $decoded;
+        $defaults = self::defaults();
+
+        if (isset($row['items']) && is_string($row['items'])) {
+            $decoded = json_decode($row['items'], true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                // 配列フィールドは配列として保証
+                foreach (['items_to_bring', 'schedules', 'room_assignments'] as $f) {
+                    if (isset($decoded[$f]) && !is_array($decoded[$f])) {
+                        $decoded[$f] = [];
+                    }
                 }
+                $defaults = array_merge($defaults, $decoded);
             }
         }
+
+        foreach ($defaults as $k => $v) {
+            $row[$k] = $v;
+        }
+
         return $row;
     }
 }

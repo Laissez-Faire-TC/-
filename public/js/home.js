@@ -1,3 +1,4 @@
+
 const hamburger = document.getElementById("hamburger");
 const nav = document.getElementById("nav");
 const activityToggle = document.getElementById("activityToggle");

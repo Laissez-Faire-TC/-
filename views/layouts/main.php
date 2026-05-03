@@ -24,6 +24,11 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link" href="/expeditions">
+                            <i class="bi bi-geo-alt"></i> 遠征管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="/events">
                             <i class="bi bi-calendar-event"></i> 企画管理
                         </a>

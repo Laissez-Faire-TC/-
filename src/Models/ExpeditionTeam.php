@@ -4,27 +4,20 @@
  */
 class ExpeditionTeam
 {
-    private Database $db;
-
-    public function __construct()
-    {
-        $this->db = Database::getInstance();
-    }
-
     /**
      * 遠征IDに紐づくチーム一覧を取得（メンバー情報を含む）
      */
-    public function findByExpedition(int $expedition_id): array
+    public static function findByExpedition(int $expedition_id): array
     {
-        $teams = $this->db->fetchAll(
+        $db = Database::getInstance();
+        $teams = $db->fetchAll(
             "SELECT * FROM expedition_teams WHERE expedition_id = ? ORDER BY sort_order",
             [$expedition_id]
         );
 
-        // 各チームのメンバーを取得してセット
         foreach ($teams as &$team) {
-            $team['members'] = $this->db->fetchAll(
-                "SELECT etm.*, m.name, m.furigana, m.gender
+            $team['members'] = $db->fetchAll(
+                "SELECT etm.*, m.name_kanji, m.name_kana, m.gender, m.grade, m.enrollment_year
                  FROM expedition_team_members etm
                  JOIN members m ON m.id = etm.member_id
                  WHERE etm.team_id = ?
@@ -39,29 +32,26 @@ class ExpeditionTeam
     /**
      * チームを新規作成して作成した行を返す
      */
-    public function create(int $expedition_id, string $name): ?array
+    public static function create(int $expedition_id, string $name): ?array
     {
-        $id = $this->db->insert(
+        $db = Database::getInstance();
+        $id = $db->insert(
             "INSERT INTO expedition_teams (expedition_id, name, sort_order) VALUES (?, ?, 0)",
             [$expedition_id, $name]
         );
 
-        return $this->db->fetch(
-            "SELECT * FROM expedition_teams WHERE id = ?",
-            [$id]
-        );
+        return $db->fetch("SELECT * FROM expedition_teams WHERE id = ?", [$id]);
     }
 
     /**
      * チーム情報を更新して更新後の行を返す
      */
-    public function update(int $id, array $data): ?array
+    public static function update(int $id, array $data): ?array
     {
+        $db = Database::getInstance();
+        $allowedFields = ['name', 'sort_order'];
         $fields = [];
         $values = [];
-
-        // 許可フィールド
-        $allowedFields = ['name', 'sort_order'];
 
         foreach ($allowedFields as $field) {
             if (array_key_exists($field, $data)) {
@@ -71,43 +61,33 @@ class ExpeditionTeam
         }
 
         if (empty($fields)) {
-            return $this->db->fetch("SELECT * FROM expedition_teams WHERE id = ?", [$id]);
+            return $db->fetch("SELECT * FROM expedition_teams WHERE id = ?", [$id]);
         }
 
         $values[] = $id;
-        $this->db->execute(
+        $db->execute(
             "UPDATE expedition_teams SET " . implode(', ', $fields) . " WHERE id = ?",
             $values
         );
 
-        return $this->db->fetch("SELECT * FROM expedition_teams WHERE id = ?", [$id]);
+        return $db->fetch("SELECT * FROM expedition_teams WHERE id = ?", [$id]);
     }
 
     /**
      * チームを削除（メンバー情報も含めてトランザクション内で削除）
      */
-    public function delete(int $id): bool
+    public static function delete(int $id): bool
     {
-        $this->db->beginTransaction();
+        $db = Database::getInstance();
+        $db->beginTransaction();
 
         try {
-            // 先にチームメンバーを削除
-            $this->db->execute(
-                "DELETE FROM expedition_team_members WHERE team_id = ?",
-                [$id]
-            );
-
-            // チーム本体を削除
-            $result = $this->db->execute(
-                "DELETE FROM expedition_teams WHERE id = ?",
-                [$id]
-            ) > 0;
-
-            $this->db->commit();
+            $db->execute("DELETE FROM expedition_team_members WHERE team_id = ?", [$id]);
+            $result = $db->execute("DELETE FROM expedition_teams WHERE id = ?", [$id]) > 0;
+            $db->commit();
             return $result;
-
         } catch (Exception $e) {
-            $this->db->rollback();
+            $db->rollback();
             throw $e;
         }
     }

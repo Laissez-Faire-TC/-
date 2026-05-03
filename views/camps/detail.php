@@ -26,6 +26,9 @@
     <li class="nav-item">
         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabCollection" onclick="loadCollection()">集金管理</button>
     </li>
+    <li class="nav-item">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabBooklet" onclick="loadBooklet()">しおり</button>
+    </li>
 </ul>
 
 <div class="tab-content">
@@ -2166,6 +2169,10 @@ function renderCollection(data) {
 
     if (!data.collection) {
         // 集金未作成 → 作成フォームを表示
+        const suggested = data.suggested_amount || '';
+        const hint = suggested
+            ? `<small class="text-muted">計算結果の平均負担額: ¥${Number(suggested).toLocaleString()}</small>`
+            : '';
         content.innerHTML = `
             <h4 class="mb-4">集金管理</h4>
             <div class="card">
@@ -2174,7 +2181,9 @@ function renderCollection(data) {
                     <div class="row g-3 align-items-end">
                         <div class="col-md-4">
                             <label class="form-label">デフォルト金額（円）</label>
-                            <input type="number" class="form-control" id="newDefaultAmount" min="0" placeholder="例: 3000">
+                            <input type="number" class="form-control" id="newDefaultAmount" min="0"
+                                   value="${suggested}" placeholder="例: 3000">
+                            ${hint}
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">入金期限</label>
@@ -2192,9 +2201,10 @@ function renderCollection(data) {
         return;
     }
 
-    const col         = data.collection;
-    const submitted   = data.submitted   || [];
-    const unsubmitted = data.unsubmitted || [];
+    const col            = data.collection;
+    const submitted      = data.submitted   || [];
+    const unsubmitted    = data.unsubmitted || [];
+    const suggestedAmount = data.suggested_amount || null;
     const allItems    = [...submitted, ...unsubmitted].sort((a, b) =>
         (a.name_kana || '').localeCompare(b.name_kana || '', 'ja')
     );
@@ -2353,8 +2363,16 @@ function renderCollection(data) {
                 <div class="row g-3 align-items-end">
                     <div class="col-md-4">
                         <label class="form-label">デフォルト金額（円）</label>
-                        <input type="number" class="form-control" id="editDefaultAmount"
-                               value="${col.default_amount}" min="0">
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="editDefaultAmount"
+                                   value="${col.default_amount}" min="0">
+                            ${suggestedAmount ? `<button class="btn btn-outline-secondary" type="button"
+                                title="計算結果の平均負担額 ¥${Number(suggestedAmount).toLocaleString()} を反映"
+                                onclick="document.getElementById('editDefaultAmount').value = ${suggestedAmount}">
+                                計算結果を反映
+                            </button>` : ''}
+                        </div>
+                        ${suggestedAmount ? `<small class="text-muted">計算結果の平均負担額: ¥${Number(suggestedAmount).toLocaleString()}</small>` : ''}
                     </div>
                     <div class="col-md-4">
                         <label class="form-label">入金期限</label>
@@ -2841,3 +2859,1254 @@ async function applyMemberEdit(applicationId) {
     min-width: 120px;
 }
 </style>
+
+<!-- ========== しおりタブ ========== -->
+<div class="tab-pane fade" id="tabBooklet">
+    <div id="bookletArea">読み込み中...</div>
+</div>
+
+<!-- 参加者選択モーダル -->
+<div class="modal fade" id="participantPickerModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="pickerModalTitle">参加者を選択</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-2">
+                    <input type="text" class="form-control form-control-sm" id="pickerSearch" placeholder="名前で絞り込み..." oninput="filterPicker()">
+                </div>
+                <div class="row g-1 mb-2">
+                    <div class="col-auto">
+                        <select class="form-select form-select-sm" id="pickerGradeFilter" onchange="filterPicker()">
+                            <option value="">全学年</option>
+                            <option value="1">1年</option>
+                            <option value="2">2年</option>
+                            <option value="3">3年</option>
+                            <option value="4">4年以上</option>
+                            <option value="0">OB/OG</option>
+                        </select>
+                    </div>
+                    <div class="col-auto">
+                        <select class="form-select form-select-sm" id="pickerGenderFilter" onchange="filterPicker()">
+                            <option value="">全性別</option>
+                            <option value="male">男</option>
+                            <option value="female">女</option>
+                        </select>
+                    </div>
+                    <div class="col-auto ms-auto">
+                        <button class="btn btn-outline-secondary btn-sm" onclick="selectAllVisible()">表示中を全選択</button>
+                        <button class="btn btn-outline-secondary btn-sm ms-1" onclick="clearAllPicker()">全解除</button>
+                    </div>
+                </div>
+                <div id="pickerList" style="max-height:350px;overflow-y:auto;"></div>
+            </div>
+            <div class="modal-footer">
+                <span class="text-muted small me-auto" id="pickerSelectedCount">0人選択中</span>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-primary" onclick="applyPickerSelection()">選択を反映</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+/* ---- しおり管理 ---- */
+let _bookletData = null;
+let _allParticipants = null;
+let _pickerCallback  = null;
+let _pickerSelected  = new Set();
+
+async function loadBooklet() {
+    if (_bookletData !== null) { renderBookletEditor(_bookletData); return; }
+    try {
+        const [bRes, pRes] = await Promise.all([
+            fetch(`/api/camps/<?= (int)$campId ?>/booklet`),
+            fetch(`/api/camps/<?= (int)$campId ?>/booklet/participants`),
+        ]);
+        const bData = await bRes.json();
+        const pData = await pRes.json();
+        if (bData.success) {
+            _bookletData = bData.data;
+            _allParticipants = pData.success ? pData.data.participants : [];
+            renderBookletEditor(_bookletData);
+        } else {
+            document.getElementById('bookletArea').innerHTML = '<div class="alert alert-danger">読み込みに失敗しました</div>';
+        }
+    } catch(e) {
+        document.getElementById('bookletArea').innerHTML = '<div class="alert alert-danger">通信エラー</div>';
+    }
+}
+
+function renderBookletEditor(b) {
+    const publicToken = b.public_token || '';
+    const baseUrl = window.location.origin;
+    const publicUrl = publicToken ? `${baseUrl}/booklet/${publicToken}` : '';
+
+    document.getElementById('bookletArea').innerHTML = `
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="mb-0">合宿しおり編集</h5>
+    <div class="d-flex gap-2 flex-wrap">
+        ${publicUrl ? `<a href="/member/camp/<?= (int)$campId ?>/booklet" target="_blank" class="btn btn-outline-primary btn-sm"><i class="bi bi-eye"></i> 会員向けプレビュー</a>` : ''}
+        <span id="bookletSaveStatus" class="small text-muted ms-2"></span>
+        <button class="btn btn-outline-secondary btn-sm" onclick="saveBooklet(false)"><i class="bi bi-save"></i> 今すぐ保存</button>
+    </div>
+</div>
+
+<!-- 公開設定 -->
+<div class="card mb-3">
+    <div class="card-header fw-bold">公開設定</div>
+    <div class="card-body">
+        <div class="form-check form-switch mb-2">
+            <input class="form-check-input" type="checkbox" id="bIsPublic" ${b.is_public ? 'checked' : ''} onchange="scheduleBookletSave()">
+            <label class="form-check-label" for="bIsPublic">会員ログイン後に表示する</label>
+        </div>
+        ${publicUrl ? `
+        <div class="mb-2">
+            <label class="form-label small">公開URL（ログイン不要でアクセス可能）</label>
+            <div class="input-group input-group-sm">
+                <input type="text" class="form-control" value="${publicUrl}" readonly id="bookletPublicUrl">
+                <button class="btn btn-outline-secondary" onclick="copyBookletUrl()"><i class="bi bi-clipboard"></i></button>
+                <a href="${publicUrl}" target="_blank" class="btn btn-outline-primary"><i class="bi bi-box-arrow-up-right"></i></a>
+            </div>
+        </div>` : ''}
+        <button class="btn btn-outline-secondary btn-sm" onclick="regenBookletToken()">
+            <i class="bi bi-arrow-clockwise"></i> ${publicToken ? '公開URLを再発行' : '公開URLを発行'}
+        </button>
+    </div>
+</div>
+
+<!-- 集合情報 -->
+<div class="card mb-3">
+    <div class="card-header fw-bold">集合情報</div>
+    <div class="card-body">
+        <div class="row g-2 mb-2">
+            <div class="col-md-3">
+                <label class="form-label small">集合時間</label>
+                <input type="text" class="form-control form-control-sm" id="bMeetingTime" value="${h(b.meeting_time||'8:40')}" placeholder="8:40" oninput="scheduleBookletSave()">
+            </div>
+            <div class="col-md-5">
+                <label class="form-label small">集合場所</label>
+                <input type="text" class="form-control form-control-sm" id="bMeetingPlace" value="${h(b.meeting_place||'新宿センタービル（地上）')}" oninput="scheduleBookletSave()">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small">帰着場所（任意）</label>
+                <input type="text" class="form-control form-control-sm" id="bReturnPlace" value="${h(b.return_place||'')}" oninput="scheduleBookletSave()">
+            </div>
+        </div>
+        <div>
+            <label class="form-label small">備考（地図の説明など）</label>
+            <textarea class="form-control form-control-sm" id="bMeetingNote" rows="2" oninput="scheduleBookletSave()">${h(b.meeting_note||'')}</textarea>
+        </div>
+    </div>
+</div>
+
+<!-- 持ち物 -->
+<div class="card mb-3">
+    <div class="card-header fw-bold d-flex justify-content-between">
+        持ち物
+        <button class="btn btn-outline-secondary btn-sm" onclick="addBringItem()">＋ 追加</button>
+    </div>
+    <div class="card-body p-2" id="bringItemList">
+        ${renderBringItems(b.items_to_bring||[])}
+    </div>
+</div>
+
+<!-- タイムスケジュール -->
+<div class="card mb-3">
+    <div class="card-header fw-bold d-flex justify-content-between align-items-center">
+        タイムスケジュール（日別）
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-primary btn-sm" onclick="importScheduleFromSlots()" title="日程設定タブのタイムスロットから自動生成します">
+                <i class="bi bi-arrow-repeat"></i> 日程設定から取り込む
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" onclick="addScheduleDay()">＋ 日追加</button>
+        </div>
+    </div>
+    <div class="card-body p-2" id="schedulesDayList">
+        ${renderScheduleDays(b.schedules||[])}
+    </div>
+</div>
+
+<!-- 団体戦チーム分け -->
+<div class="card mb-3">
+    <div class="card-header fw-bold d-flex justify-content-between align-items-center">
+        団体戦チーム分け
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-primary btn-sm" onclick="openPickerForTeamMember(null)">
+                <i class="bi bi-people"></i> 参加者から選択
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" onclick="addTeamBattleTeam()">＋ チーム追加</button>
+        </div>
+    </div>
+    <div class="card-body p-2" id="teamBattleTeamList">
+        ${renderTeamBattleTeams(b.team_battle_teams||[])}
+    </div>
+    <div class="card-footer">
+        <label class="form-label small">団体戦ルール</label>
+        <textarea class="form-control form-control-sm" id="bTeamBattleRules" rows="4" oninput="scheduleBookletSave()">${h(b.team_battle_rules||'')}</textarea>
+    </div>
+</div>
+
+<!-- 紅白戦チーム分け -->
+<div class="card mb-3">
+    <div class="card-header fw-bold">紅白戦チーム分け</div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <label class="form-label small mb-0 text-danger fw-bold">赤組</label>
+                    <button class="btn btn-outline-primary btn-sm py-0" onclick="openPickerForKohaku()"><i class="bi bi-people"></i> 選択</button>
+                </div>
+                <div id="kohakuRedList">${renderKohakuMembers(b.kohaku_teams?.red||[], 'red')}</div>
+            </div>
+            <div class="col-md-6">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <label class="form-label small mb-0 fw-bold">白組</label>
+                    <button class="btn btn-outline-primary btn-sm py-0" onclick="openPickerForKohakuWhite()"><i class="bi bi-people"></i> 選択</button>
+                </div>
+                <div id="kohakuWhiteList">${renderKohakuMembers(b.kohaku_teams?.white||[], 'white')}</div>
+            </div>
+        </div>
+        <div class="mt-3">
+            <label class="form-label small">紅白戦ルール</label>
+            <textarea class="form-control form-control-sm" id="bKohakuRules" rows="4" oninput="scheduleBookletSave()">${h(b.kohaku_rules||'')}</textarea>
+        </div>
+    </div>
+</div>
+
+<!-- 紅白戦対戦表 -->
+<div class="card mb-3">
+    <div class="card-header fw-bold d-flex justify-content-between">
+        紅白戦対戦表
+        <button class="btn btn-outline-secondary btn-sm" onclick="addKohakuRound()">＋ 試合追加</button>
+    </div>
+    <div class="card-body p-2" id="kohakuMatchList">
+        ${renderKohakuMatches(b.kohaku_matches||[])}
+    </div>
+</div>
+
+<!-- 夜レク班分け -->
+<div class="card mb-3">
+    <div class="card-header fw-bold d-flex justify-content-between align-items-center">
+        夜レク班分け
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-success btn-sm" onclick="openNightRecAutoModal()">
+                <i class="bi bi-shuffle"></i> 自動振り分け
+            </button>
+            <button class="btn btn-outline-primary btn-sm" onclick="openPickerForNightRec(null)">
+                <i class="bi bi-people"></i> 参加者から選択
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" onclick="addNightRecGroup()">＋ 班追加</button>
+        </div>
+    </div>
+    <div class="card-body p-2" id="nightRecGroupList">
+        ${renderNightRecGroups(b.night_rec_groups||[])}
+    </div>
+</div>
+
+<!-- 夜レク自動振り分けモーダル -->
+<div class="modal fade" id="nightRecAutoModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">夜レク自動振り分け</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted mb-3">学年・男女比が均等になるよう自動で振り分けます。現在の班分けは上書きされます。</p>
+                <div class="mb-3">
+                    <label class="form-label">班数</label>
+                    <input type="number" class="form-control" id="nightRecGroupCount" min="2" max="20" value="4">
+                </div>
+                <div id="nightRecAutoPreview" class="small text-muted"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-success" onclick="execNightRecAuto()">振り分ける</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 部屋割り -->
+<div class="card mb-3">
+    <div class="card-header fw-bold d-flex justify-content-between">
+        部屋割り
+        <button class="btn btn-outline-secondary btn-sm" onclick="addRoomCategory()">＋ カテゴリ追加</button>
+    </div>
+    <div class="card-body p-2" id="roomAssignmentList">
+        ${renderRoomAssignments(b.room_assignments||[])}
+    </div>
+</div>
+
+<!-- 宿内平面図 -->
+<div class="card mb-3">
+    <div class="card-header fw-bold">宿内平面図</div>
+    <div class="card-body">
+        <div class="d-flex gap-2 align-items-center mb-2">
+            <label class="btn btn-outline-secondary btn-sm mb-0" style="cursor:pointer;">
+                <i class="bi bi-upload"></i> 画像をアップロード
+                <input type="file" accept="image/*" style="display:none;" onchange="uploadFloorPlan(this)">
+            </label>
+            <span id="floorPlanUploadStatus" class="small text-muted"></span>
+        </div>
+        <div id="floorPlanPreview">
+            ${b.floor_plan_image
+                ? `<img src="${h(b.floor_plan_image)}" class="img-fluid rounded" style="max-height:300px;" alt="平面図">
+                   <div class="mt-1">
+                       <button class="btn btn-outline-danger btn-sm py-0" onclick="removeFloorPlan()"><i class="bi bi-trash"></i> 削除</button>
+                   </div>`
+                : '<p class="text-muted small mb-0">画像が設定されていません</p>'}
+        </div>
+        <input type="hidden" id="bFloorPlanImage" value="${h(b.floor_plan_image||'')}">
+    </div>
+</div>
+
+<!-- 配膳当番 -->
+<div class="card mb-3">
+    <div class="card-header fw-bold d-flex justify-content-between">
+        配膳当番
+        <button class="btn btn-outline-secondary btn-sm" onclick="addMealDutyRow()">＋ 行追加</button>
+    </div>
+    <div class="card-body p-2" id="mealDutyList">
+        ${renderMealDuty(b.meal_duty||[])}
+    </div>
+</div>
+
+<div class="text-end mb-4">
+    <span class="text-muted small me-2">編集内容は自動的に保存されます</span>
+    <button class="btn btn-outline-secondary" onclick="saveBooklet(false)"><i class="bi bi-save"></i> 今すぐ保存</button>
+</div>
+`;
+}
+
+/* ---- ヘルパー ---- */
+function h(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ---- 持ち物 ---- */
+function renderBringItems(items) {
+    if (!items.length) return '<p class="text-muted small p-2 mb-0">まだ登録されていません</p>';
+    return items.map((it, i) => `
+    <div class="d-flex gap-2 align-items-center mb-1 bring-item" data-idx="${i}">
+        <input type="checkbox" class="form-check-input" ${it.highlight ? 'checked' : ''} onchange="updateBringItem(${i},'highlight',this.checked)" title="強調">
+        <input type="text" class="form-control form-control-sm" value="${h(it.text||'')}" oninput="updateBringItem(${i},'text',this.value)" placeholder="持ち物">
+        <input type="text" class="form-control form-control-sm" value="${h(it.note||'')}" oninput="updateBringItem(${i},'note',this.value)" placeholder="補足（任意）" style="max-width:180px;">
+        <button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="removeBringItem(${i})">×</button>
+    </div>`).join('');
+}
+function addBringItem() {
+    _bookletData.items_to_bring = _bookletData.items_to_bring || [];
+    _bookletData.items_to_bring.push({text:'', note:'', highlight: false});
+    document.getElementById('bringItemList').innerHTML = renderBringItems(_bookletData.items_to_bring);
+    scheduleBookletSave();
+}
+function updateBringItem(i, key, val) {
+    _bookletData.items_to_bring[i][key] = val;
+    scheduleBookletSave();
+}
+function removeBringItem(i) {
+    _bookletData.items_to_bring.splice(i, 1);
+    document.getElementById('bringItemList').innerHTML = renderBringItems(_bookletData.items_to_bring);
+    scheduleBookletSave();
+}
+
+/* ---- タイムスケジュール ---- */
+function renderScheduleDays(days) {
+    if (!days.length) return '<p class="text-muted small p-2 mb-0">まだ登録されていません</p>';
+    return days.map((day, di) => `
+    <div class="border rounded mb-2">
+        <div class="d-flex gap-2 align-items-center p-2" style="cursor:pointer;" onclick="toggleScheduleDay(${di})">
+            <span class="text-muted" id="scheduleChevron_${di}" style="font-size:.8rem;">▼</span>
+            <input type="text" class="form-control form-control-sm" value="${h(day.label||`${di+1}日目の予定`)}" oninput="updateScheduleDay(${di},'label',this.value)" onclick="event.stopPropagation()" placeholder="${di+1}日目の予定" style="max-width:200px;">
+            <span class="text-muted small ms-1">${(day.rows||[]).length}行</span>
+            <button class="btn btn-outline-secondary btn-sm py-0 ms-auto" onclick="event.stopPropagation();addScheduleRow(${di})">＋ 行追加</button>
+            <button class="btn btn-outline-danger btn-sm py-0" onclick="event.stopPropagation();removeScheduleDay(${di})">この日を削除</button>
+        </div>
+        <div id="scheduleCollapse_${di}">
+            <div class="px-2 pb-2">
+                <table class="table table-sm mb-0">
+                    <thead><tr><th style="width:80px">時間</th><th>予定</th><th>備考</th><th style="width:40px"></th></tr></thead>
+                    <tbody id="scheduleRows_${di}">
+                        ${renderScheduleRows(day.rows||[], di)}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>`).join('');
+}
+
+function toggleScheduleDay(di) {
+    const el = document.getElementById(`scheduleCollapse_${di}`);
+    const ch = document.getElementById(`scheduleChevron_${di}`);
+    if (!el) return;
+    const collapsed = el.style.display === 'none';
+    el.style.display = collapsed ? '' : 'none';
+    ch.textContent = collapsed ? '▼' : '▶';
+}
+function renderScheduleRows(rows, di) {
+    return rows.map((row, ri) => `
+    <tr>
+        <td><input type="text" class="form-control form-control-sm" value="${h(row.time||'')}" oninput="updateScheduleRow(${di},${ri},'time',this.value)" placeholder="8:00"></td>
+        <td><input type="text" class="form-control form-control-sm" value="${h(row.activity||'')}" oninput="updateScheduleRow(${di},${ri},'activity',this.value)"></td>
+        <td><input type="text" class="form-control form-control-sm" value="${h(row.note||'')}" oninput="updateScheduleRow(${di},${ri},'note',this.value)" placeholder="配膳当番など（赤字）"></td>
+        <td><button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="removeScheduleRow(${di},${ri})">×</button></td>
+    </tr>`).join('');
+}
+function addScheduleDay() {
+    _bookletData.schedules = _bookletData.schedules || [];
+    _bookletData.schedules.push({label:`${_bookletData.schedules.length+1}日目の予定`, rows:[]});
+    document.getElementById('schedulesDayList').innerHTML = renderScheduleDays(_bookletData.schedules);
+    scheduleBookletSave();
+}
+function removeScheduleDay(di) {
+    _bookletData.schedules.splice(di, 1);
+    document.getElementById('schedulesDayList').innerHTML = renderScheduleDays(_bookletData.schedules);
+    scheduleBookletSave();
+}
+function updateScheduleDay(di, key, val) {
+    _bookletData.schedules[di][key] = val;
+    scheduleBookletSave();
+}
+function addScheduleRow(di) {
+    _bookletData.schedules[di].rows = _bookletData.schedules[di].rows || [];
+    _bookletData.schedules[di].rows.push({time:'', activity:'', note:''});
+    document.getElementById(`scheduleRows_${di}`).innerHTML = renderScheduleRows(_bookletData.schedules[di].rows, di);
+    // 折りたたみ中なら開く
+    const col = document.getElementById(`scheduleCollapse_${di}`);
+    const ch  = document.getElementById(`scheduleChevron_${di}`);
+    if (col && col.style.display === 'none') { col.style.display = ''; if (ch) ch.textContent = '▼'; }
+    _updateScheduleRowCount(di);
+    scheduleBookletSave();
+}
+function removeScheduleRow(di, ri) {
+    _bookletData.schedules[di].rows.splice(ri, 1);
+    document.getElementById(`scheduleRows_${di}`).innerHTML = renderScheduleRows(_bookletData.schedules[di].rows, di);
+    _updateScheduleRowCount(di);
+    scheduleBookletSave();
+}
+function _updateScheduleRowCount(di) {
+    const el = document.querySelector(`#scheduleCollapse_${di}`)?.closest('.border.rounded')?.querySelector('.text-muted.small.ms-1');
+    if (el) el.textContent = `${(_bookletData.schedules[di]?.rows||[]).length}行`;
+}
+function updateScheduleRow(di, ri, key, val) {
+    _bookletData.schedules[di].rows[ri][key] = val;
+    scheduleBookletSave();
+}
+
+/* ---- 団体戦チーム ---- */
+function renderTeamBattleTeams(teams) {
+    if (!teams.length) return '<p class="text-muted small p-2 mb-0">まだ登録されていません</p>';
+    return `<div class="row g-2">${teams.map((team, ti) => `
+    <div class="col-md-3">
+        <div class="border rounded p-2 h-100">
+            <div class="d-flex gap-1 mb-1">
+                <input type="text" class="form-control form-control-sm" value="${h(team.team_name||'')}" oninput="updateTeamBattle(${ti},'team_name',this.value)" placeholder="チーム1">
+                <button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="removeTeamBattle(${ti})">×</button>
+            </div>
+            <div id="teamMembers_${ti}">${renderTeamMembers(team.members||[], ti)}</div>
+            <div class="mt-1">
+                <button class="btn btn-outline-primary btn-sm w-100 py-0" onclick="openPickerForTeamMember(${ti})"><i class="bi bi-people"></i> 名簿から選択</button>
+            </div>
+        </div>
+    </div>`).join('')}</div>`;
+}
+function renderTeamMembers(members, ti) {
+    if (!members.length) return '<p class="text-muted small mb-1">（未選択）</p>';
+    return members.map((m, mi) => `
+    <div class="d-flex gap-1 align-items-center mb-1">
+        <input type="checkbox" class="form-check-input flex-shrink-0" ${m.is_leader ? 'checked' : ''} onchange="updateTeamMember(${ti},${mi},'is_leader',this.checked)" title="リーダー">
+        <span class="small flex-fill">${h(m.name||'')}</span>
+        <button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="removeTeamMember(${ti},${mi})">×</button>
+    </div>`).join('');
+}
+function addTeamBattleTeam() {
+    _bookletData.team_battle_teams = _bookletData.team_battle_teams || [];
+    _bookletData.team_battle_teams.push({team_name:`チーム${_bookletData.team_battle_teams.length+1}`, members:[]});
+    document.getElementById('teamBattleTeamList').innerHTML = renderTeamBattleTeams(_bookletData.team_battle_teams);
+    scheduleBookletSave();
+}
+function removeTeamBattle(ti) {
+    _bookletData.team_battle_teams.splice(ti, 1);
+    document.getElementById('teamBattleTeamList').innerHTML = renderTeamBattleTeams(_bookletData.team_battle_teams);
+    scheduleBookletSave();
+}
+function updateTeamBattle(ti, key, val) {
+    _bookletData.team_battle_teams[ti][key] = val;
+    scheduleBookletSave();
+}
+function removeTeamMember(ti, mi) {
+    _bookletData.team_battle_teams[ti].members.splice(mi, 1);
+    document.getElementById(`teamMembers_${ti}`).innerHTML = renderTeamMembers(_bookletData.team_battle_teams[ti].members, ti);
+    scheduleBookletSave();
+}
+function updateTeamMember(ti, mi, key, val) {
+    _bookletData.team_battle_teams[ti].members[mi][key] = val;
+    scheduleBookletSave();
+}
+
+/* ---- 紅白戦メンバー ---- */
+function renderKohakuMembers(members, color) {
+    if (!members.length) return '<p class="text-muted small mb-1">（未選択）</p>';
+
+    // _allParticipants から性別を引く
+    const genderMap = {};
+    (_allParticipants || []).forEach(p => { genderMap[p.name] = p.gender; });
+
+    const males   = members.map((m, mi) => ({...m, mi})).filter(m => genderMap[m.name] !== 'female');
+    const females = members.map((m, mi) => ({...m, mi})).filter(m => genderMap[m.name] === 'female');
+
+    const renderRow = (m) => `
+        <div class="d-flex gap-1 align-items-center mb-1">
+            <span class="small flex-fill">${h(m.name||'')}</span>
+            <button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="removeKohakuMember('${color}',${m.mi})">×</button>
+        </div>`;
+
+    return `<div class="row g-2">
+        <div class="col-6">
+            <div class="text-muted small fw-bold mb-1">男子</div>
+            ${males.length ? males.map(renderRow).join('') : '<p class="text-muted small">—</p>'}
+        </div>
+        <div class="col-6">
+            <div class="text-muted small fw-bold mb-1">女子</div>
+            ${females.length ? females.map(renderRow).join('') : '<p class="text-muted small">—</p>'}
+        </div>
+    </div>`;
+}
+function removeKohakuMember(color, mi) {
+    _bookletData.kohaku_teams[color].splice(mi, 1);
+    document.getElementById(`kohaku${color.charAt(0).toUpperCase()+color.slice(1)}List`).innerHTML = renderKohakuMembers(_bookletData.kohaku_teams[color], color);
+    scheduleBookletSave();
+}
+
+/* ---- 紅白戦対戦表 ---- */
+const MATCH_TYPES = [{v:'男子D',l:'男子ダブルス'},{v:'女子D',l:'女子ダブルス'},{v:'混合D',l:'ミックスダブルス'}];
+
+function renderKohakuMatches(matches) {
+    if (!matches.length) return '<p class="text-muted small p-2 mb-0">まだ登録されていません</p>';
+    return matches.map((round, ri) => `
+    <div class="border rounded mb-2 p-2">
+        <div class="d-flex gap-2 align-items-center mb-2">
+            <input type="text" class="form-control form-control-sm" value="${h(round.round||`${ri+1}試合目`)}" oninput="updateKohakuRound(${ri},'round',this.value)" style="max-width:120px;">
+            <button class="btn btn-outline-secondary btn-sm py-0" onclick="addKohakuCourt(${ri})">＋ 試合追加</button>
+            <button class="btn btn-outline-danger btn-sm py-0 ms-auto" onclick="removeKohakuRound(${ri})">削除</button>
+        </div>
+        <div id="kohakuCourts_${ri}">
+            ${renderKohakuCourts(round.courts||[], ri)}
+        </div>
+    </div>`).join('');
+}
+
+function renderKohakuCourts(courts, ri) {
+    if (!courts.length) return '<p class="text-muted small mb-0">試合がありません</p>';
+    return courts.map((c, ci) => {
+        const typeOpts = MATCH_TYPES.map(t => `<option value="${t.v}" ${c.type===t.v?'selected':''}>${t.l}</option>`).join('');
+        const fmt = (n1, n2) => {
+            if (!n1 && !n2) return '<span class="text-muted">未選択</span>';
+            return `${h(n1||'？')} ／ ${h(n2||'？')}`;
+        };
+        return `
+        <div class="border rounded p-2 mb-1 small">
+            <div class="d-flex gap-2 align-items-center mb-2">
+                <span class="text-muted fw-bold">${ci+1}番コート</span>
+                <select class="form-select form-select-sm" style="max-width:160px;" onchange="updateKohakuCourt(${ri},${ci},'type',this.value)">
+                    ${typeOpts}
+                </select>
+                <button class="btn btn-outline-danger btn-sm py-0 ms-auto px-2" onclick="removeKohakuCourt(${ri},${ci})">×</button>
+            </div>
+            <div class="row g-1">
+                <div class="col-6">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="fw-bold"><span class="badge me-1" style="background:#dc2626;">赤</span>赤組ペア</span>
+                        <button class="btn btn-outline-secondary btn-sm py-0 px-1" onclick="pickKohakuPair(${ri},${ci},'red')" style="font-size:.75rem;"><i class="bi bi-people"></i> 選択</button>
+                    </div>
+                    <div class="ps-1">${fmt(c.red1, c.red2)}</div>
+                </div>
+                <div class="col-6">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="fw-bold"><span class="badge me-1 bg-secondary">白</span>白組ペア</span>
+                        <button class="btn btn-outline-secondary btn-sm py-0 px-1" onclick="pickKohakuPair(${ri},${ci},'white')" style="font-size:.75rem;"><i class="bi bi-people"></i> 選択</button>
+                    </div>
+                    <div class="ps-1">${fmt(c.white1, c.white2)}</div>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function addKohakuRound() {
+    _bookletData.kohaku_matches = _bookletData.kohaku_matches || [];
+    const ri = _bookletData.kohaku_matches.length;
+    _bookletData.kohaku_matches.push({round:`${ri+1}試合目`, courts:[]});
+    document.getElementById('kohakuMatchList').innerHTML = renderKohakuMatches(_bookletData.kohaku_matches);
+    scheduleBookletSave();
+}
+function removeKohakuRound(ri) {
+    _bookletData.kohaku_matches.splice(ri, 1);
+    document.getElementById('kohakuMatchList').innerHTML = renderKohakuMatches(_bookletData.kohaku_matches);
+    scheduleBookletSave();
+}
+function updateKohakuRound(ri, key, val) {
+    _bookletData.kohaku_matches[ri][key] = val;
+    scheduleBookletSave();
+}
+function addKohakuCourt(ri) {
+    _bookletData.kohaku_matches[ri].courts.push({type:'男子D', red1:'', red2:'', white1:'', white2:''});
+    document.getElementById(`kohakuCourts_${ri}`).innerHTML = renderKohakuCourts(_bookletData.kohaku_matches[ri].courts, ri);
+    scheduleBookletSave();
+}
+function removeKohakuCourt(ri, ci) {
+    _bookletData.kohaku_matches[ri].courts.splice(ci, 1);
+    document.getElementById(`kohakuCourts_${ri}`).innerHTML = renderKohakuCourts(_bookletData.kohaku_matches[ri].courts, ri);
+    scheduleBookletSave();
+}
+function updateKohakuCourt(ri, ci, key, val) {
+    _bookletData.kohaku_matches[ri].courts[ci][key] = val;
+    document.getElementById(`kohakuCourts_${ri}`).innerHTML = renderKohakuCourts(_bookletData.kohaku_matches[ri].courts, ri);
+    scheduleBookletSave();
+}
+
+/* 紅白戦：ペア2名同時選択ピッカー */
+function pickKohakuPair(ri, ci, color) {
+    const round  = _bookletData.kohaku_matches[ri];
+    const court  = round.courts[ci];
+    const isRed  = color === 'red';
+    const matchType = court.type || '男子D';
+
+    // 種別による性別制限
+    let genderFilter = null;
+    if (matchType === '男子D') genderFilter = 'male';
+    else if (matchType === '女子D') genderFilter = 'female';
+
+    // 選択可能：同じ組のメンバー × 性別フィルター
+    const teamNames = isRed
+        ? (_bookletData.kohaku_teams?.red   || []).map(m => m.name).filter(n => n)
+        : (_bookletData.kohaku_teams?.white || []).map(m => m.name).filter(n => n);
+
+    // 同じ round 内で既に使われている名前（自分のペア枠は除く）
+    const usedInRound = new Set();
+    round.courts.forEach((c, idx) => {
+        ['red1','red2','white1','white2'].forEach(slot => {
+            const name = c[slot] || '';
+            if (!name) return;
+            // 自コートの自分の色枠は除外（上書き可）
+            if (idx === ci && slot.startsWith(color)) return;
+            usedInRound.add(name);
+        });
+    });
+
+    const typeLabel = {男子D:'男子ダブルス', 女子D:'女子ダブルス', 混合D:'ミックスダブルス'}[matchType] || matchType;
+    const title = `${isRed?'赤組':'白組'}ペアを選択（${typeLabel}・2名まで）`;
+
+    // 現在選択中のペア
+    const preSelected = [court[`${color}1`], court[`${color}2`]].filter(n => n);
+
+    const origParticipants = _allParticipants;
+    _allParticipants = (_allParticipants || []).filter(p =>
+        teamNames.includes(p.name) &&
+        (genderFilter === null || p.gender === genderFilter)
+    );
+
+    openPicker(title, preSelected, (names) => {
+        _allParticipants = origParticipants;
+        _bookletData.kohaku_matches[ri].courts[ci][`${color}1`] = names[0] || '';
+        _bookletData.kohaku_matches[ri].courts[ci][`${color}2`] = names[1] || '';
+        document.getElementById(`kohakuCourts_${ri}`).innerHTML = renderKohakuCourts(round.courts, ri);
+        scheduleBookletSave();
+    }, [...usedInRound], false, 2);
+
+    _allParticipants = origParticipants;
+}
+
+let _pickerSingleMode = false;
+function togglePicker(name, checked) {
+    if (checked) {
+        if (_pickerSingleMode) {
+            // シングルモード：他を全解除してから追加
+            _pickerSelected.clear();
+            document.querySelectorAll('#pickerList input[type=checkbox]').forEach(cb => { cb.checked = false; });
+            _pickerSelected.add(name);
+            const cb = document.querySelector(`#pickerList input[value="${CSS.escape(name)}"]`);
+            if (cb) cb.checked = true;
+        } else if (_pickerMaxSelect > 0 && _pickerSelected.size >= _pickerMaxSelect) {
+            // 上限超え：チェックを戻す
+            const cb = document.querySelector(`#pickerList input[value="${CSS.escape(name)}"]`);
+            if (cb) cb.checked = false;
+            return;
+        } else {
+            _pickerSelected.add(name);
+        }
+    } else {
+        _pickerSelected.delete(name);
+    }
+    document.getElementById('pickerSelectedCount').textContent = _pickerMaxSelect > 0 ? `${_pickerSelected.size}／${_pickerMaxSelect}名選択中` : `${_pickerSelected.size}人選択中`;
+}
+
+/* ---- 夜レク班 ---- */
+function renderNightRecGroups(groups) {
+    if (!groups.length) return '<p class="text-muted small p-2 mb-0">まだ登録されていません</p>';
+    const groupNames = groups.map(g => g.group_name || '');
+    return `<div class="row g-2">${groups.map((g, gi) => `
+    <div class="col-md-3">
+        <div class="border rounded p-2 h-100">
+            <div class="d-flex gap-1 mb-1">
+                <input type="text" class="form-control form-control-sm" value="${h(g.group_name||'')}" oninput="updateNightRecGroup(${gi},'group_name',this.value)" placeholder="1班">
+                <button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="removeNightRecGroup(${gi})">×</button>
+            </div>
+            <div id="nrecMembers_${gi}">${renderNightRecMembers(g.members||[], gi, groups.length)}</div>
+            <div class="mt-1">
+                <button class="btn btn-outline-primary btn-sm w-100 py-0" onclick="openPickerForNightRec(${gi})"><i class="bi bi-people"></i> 名簿から選択</button>
+            </div>
+        </div>
+    </div>`).join('')}</div>`;
+}
+function renderNightRecMembers(members, gi, groupCount) {
+    if (!members.length) return '<p class="text-muted small mb-1">（未選択）</p>';
+    const gc = groupCount ?? (_bookletData.night_rec_groups||[]).length;
+    // 移動先選択肢：自分以外の班
+    const moveOpts = Array.from({length: gc}, (_, i) => i)
+        .filter(i => i !== gi)
+        .map(i => {
+            const gname = (_bookletData.night_rec_groups||[])[i]?.group_name || `${i+1}班`;
+            return `<option value="${i}">${h(gname)}</option>`;
+        }).join('');
+    return members.map((m, mi) => `
+    <div class="d-flex gap-1 align-items-center mb-1">
+        <span class="small flex-fill">${h(m.name||'')}</span>
+        ${gc > 1 ? `<select class="form-select form-select-sm py-0" style="width:4.5rem;font-size:.7rem;" title="移動先" onchange="moveNightRecMember(${gi},${mi},parseInt(this.value));this.value=''">
+            <option value="">移動</option>${moveOpts}
+        </select>` : ''}
+        <button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="removeNightRecMember(${gi},${mi})">×</button>
+    </div>`).join('');
+}
+
+/* 夜レク：別班へ移動 */
+function moveNightRecMember(fromGi, mi, toGi) {
+    const member = _bookletData.night_rec_groups[fromGi].members.splice(mi, 1)[0];
+    _bookletData.night_rec_groups[toGi].members.push(member);
+    document.getElementById('nightRecGroupList').innerHTML = renderNightRecGroups(_bookletData.night_rec_groups);
+    scheduleBookletSave();
+}
+
+/* 夜レク：自動振り分けモーダルを開く */
+function openNightRecAutoModal() {
+    const modal = new bootstrap.Modal(document.getElementById('nightRecAutoModal'));
+    const countEl = document.getElementById('nightRecGroupCount');
+    const preview = document.getElementById('nightRecAutoPreview');
+    countEl.oninput = () => {
+        const n = parseInt(countEl.value) || 0;
+        const total = (_allParticipants||[]).length;
+        preview.textContent = n > 0 && total > 0 ? `参加者 ${total} 名を ${n} 班に振り分けます（1班あたり約 ${Math.ceil(total/n)} 名）` : '';
+    };
+    countEl.oninput();
+    modal.show();
+}
+
+/* 夜レク：自動振り分け実行 */
+function execNightRecAuto() {
+    const n = parseInt(document.getElementById('nightRecGroupCount').value) || 0;
+    if (n < 2) { alert('班数は2以上を指定してください'); return; }
+
+    const participants = _allParticipants || [];
+    if (!participants.length) { alert('参加者情報が読み込まれていません'); return; }
+
+    // 学年・性別でソートしてからラウンドロビン配分
+    // グループ順序: 学年昇順 → 同学年内は男→女の交互配置で均等化
+    const sorted = [...participants].sort((a, b) => {
+        if (a.grade !== b.grade) return a.grade - b.grade;
+        // 同学年内では男女交互になるよう gender でソート
+        const ga = a.gender === 'female' ? 1 : 0;
+        const gb = b.gender === 'female' ? 1 : 0;
+        return ga - gb;
+    });
+
+    // 班を初期化
+    const groups = Array.from({length: n}, (_, i) => ({
+        group_name: `${i+1}班`,
+        members: [],
+    }));
+
+    // スネーク配分（1→n→1→...）で学年・性別を均等に散らす
+    let dir = 1, gi = 0;
+    sorted.forEach(p => {
+        groups[gi].members.push({name: p.name});
+        gi += dir;
+        if (gi >= n) { gi = n - 1; dir = -1; }
+        else if (gi < 0) { gi = 0; dir = 1; }
+    });
+
+    _bookletData.night_rec_groups = groups;
+    document.getElementById('nightRecGroupList').innerHTML = renderNightRecGroups(groups);
+    bootstrap.Modal.getInstance(document.getElementById('nightRecAutoModal')).hide();
+    scheduleBookletSave();
+}
+function addNightRecGroup() {
+    _bookletData.night_rec_groups = _bookletData.night_rec_groups || [];
+    _bookletData.night_rec_groups.push({group_name:`${_bookletData.night_rec_groups.length+1}班`, members:[]});
+    document.getElementById('nightRecGroupList').innerHTML = renderNightRecGroups(_bookletData.night_rec_groups);
+    scheduleBookletSave();
+}
+function removeNightRecGroup(gi) {
+    _bookletData.night_rec_groups.splice(gi, 1);
+    document.getElementById('nightRecGroupList').innerHTML = renderNightRecGroups(_bookletData.night_rec_groups);
+    scheduleBookletSave();
+}
+function updateNightRecGroup(gi, key, val) {
+    _bookletData.night_rec_groups[gi][key] = val;
+    scheduleBookletSave();
+}
+function removeNightRecMember(gi, mi) {
+    _bookletData.night_rec_groups[gi].members.splice(mi, 1);
+    document.getElementById(`nrecMembers_${gi}`).innerHTML = renderNightRecMembers(_bookletData.night_rec_groups[gi].members, gi, _bookletData.night_rec_groups.length);
+    scheduleBookletSave();
+}
+
+/* ---- 部屋割り ---- */
+function renderRoomAssignments(cats) {
+    if (!cats.length) return '<p class="text-muted small p-2 mb-0">まだ登録されていません</p>';
+    return cats.map((cat, ci) => `
+    <div class="border rounded mb-2 p-2">
+        <div class="d-flex gap-2 align-items-center mb-1">
+            <input type="text" class="form-control form-control-sm" value="${h(cat.category||'')}" oninput="updateRoomCat(${ci},'category',this.value)" placeholder="1男" style="max-width:120px;">
+            <button class="btn btn-outline-secondary btn-sm py-0" onclick="addRoom(${ci})">＋ 部屋追加</button>
+            <button class="btn btn-outline-danger btn-sm py-0 ms-auto" onclick="removeRoomCat(${ci})">削除</button>
+        </div>
+        <div id="rooms_${ci}">
+            ${(cat.rooms||[]).map((r, ri) => `
+            <div class="d-flex gap-2 align-items-center mb-1">
+                <input type="text" class="form-control form-control-sm" value="${h(r.room_no||'')}" oninput="updateRoom(${ci},${ri},'room_no',this.value)" placeholder="401号室" style="max-width:100px;">
+                <input type="text" class="form-control form-control-sm" value="${h(r.capacity||'')}" oninput="updateRoom(${ci},${ri},'capacity',this.value)" placeholder="5人" style="max-width:80px;">
+                <button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="removeRoom(${ci},${ri})">×</button>
+            </div>`).join('')}
+        </div>
+    </div>`).join('');
+}
+function addRoomCategory() {
+    _bookletData.room_assignments = _bookletData.room_assignments || [];
+    _bookletData.room_assignments.push({category:'', rooms:[]});
+    document.getElementById('roomAssignmentList').innerHTML = renderRoomAssignments(_bookletData.room_assignments);
+    scheduleBookletSave();
+}
+function removeRoomCat(ci) {
+    _bookletData.room_assignments.splice(ci, 1);
+    document.getElementById('roomAssignmentList').innerHTML = renderRoomAssignments(_bookletData.room_assignments);
+    scheduleBookletSave();
+}
+function updateRoomCat(ci, key, val) {
+    _bookletData.room_assignments[ci][key] = val;
+    scheduleBookletSave();
+}
+function addRoom(ci) {
+    _bookletData.room_assignments[ci].rooms.push({room_no:'', capacity:''});
+    document.getElementById('roomAssignmentList').innerHTML = renderRoomAssignments(_bookletData.room_assignments);
+    scheduleBookletSave();
+}
+function removeRoom(ci, ri) {
+    _bookletData.room_assignments[ci].rooms.splice(ri, 1);
+    document.getElementById('roomAssignmentList').innerHTML = renderRoomAssignments(_bookletData.room_assignments);
+    scheduleBookletSave();
+}
+function updateRoom(ci, ri, key, val) {
+    _bookletData.room_assignments[ci].rooms[ri][key] = val;
+    scheduleBookletSave();
+}
+
+/* ---- 配膳当番 ---- */
+function renderMealDuty(duties) {
+    if (!duties.length) return '<p class="text-muted small p-2 mb-0">まだ登録されていません</p>';
+    return duties.map((md, mi) => `
+    <div class="border rounded mb-2 p-2">
+        <div class="d-flex gap-2 align-items-center mb-1">
+            <input type="text" class="form-control form-control-sm" value="${h(md.meal||'')}" oninput="updateMealDuty(${mi},'meal',this.value)" placeholder="朝 / 昼 / 夜" style="max-width:80px;">
+            <button class="btn btn-outline-secondary btn-sm py-0" onclick="addMealDutyDay(${mi})">＋ 日追加</button>
+            <button class="btn btn-outline-danger btn-sm py-0 ms-auto" onclick="removeMealDutyRow(${mi})">削除</button>
+        </div>
+        <div id="mealDays_${mi}" class="row g-1">
+            ${(md.days||[]).map((d, di) => `
+            <div class="col-md-3">
+                <div class="border rounded p-1 small">
+                    <input type="text" class="form-control form-control-sm mb-1" value="${h(d.day||'')}" oninput="updateMealDay(${mi},${di},'day',this.value)" placeholder="2日目">
+                    <input type="text" class="form-control form-control-sm" value="${h(d.group||'')}" oninput="updateMealDay(${mi},${di},'group',this.value)" placeholder="1男405号室">
+                    <button class="btn btn-outline-danger btn-sm py-0 w-100 mt-1" onclick="removeMealDay(${mi},${di})">×</button>
+                </div>
+            </div>`).join('')}
+        </div>
+    </div>`).join('');
+}
+function addMealDutyRow() {
+    _bookletData.meal_duty = _bookletData.meal_duty || [];
+    _bookletData.meal_duty.push({meal:'', days:[]});
+    document.getElementById('mealDutyList').innerHTML = renderMealDuty(_bookletData.meal_duty);
+    scheduleBookletSave();
+}
+function removeMealDutyRow(mi) {
+    _bookletData.meal_duty.splice(mi, 1);
+    document.getElementById('mealDutyList').innerHTML = renderMealDuty(_bookletData.meal_duty);
+    scheduleBookletSave();
+}
+function updateMealDuty(mi, key, val) {
+    _bookletData.meal_duty[mi][key] = val;
+    scheduleBookletSave();
+}
+function addMealDutyDay(mi) {
+    _bookletData.meal_duty[mi].days.push({day:'', group:''});
+    document.getElementById('mealDutyList').innerHTML = renderMealDuty(_bookletData.meal_duty);
+    scheduleBookletSave();
+}
+function removeMealDay(mi, di) {
+    _bookletData.meal_duty[mi].days.splice(di, 1);
+    document.getElementById('mealDutyList').innerHTML = renderMealDuty(_bookletData.meal_duty);
+    scheduleBookletSave();
+}
+function updateMealDay(mi, di, key, val) {
+    _bookletData.meal_duty[mi].days[di][key] = val;
+    scheduleBookletSave();
+}
+
+/* ---- 保存 ---- */
+/* ---- 自動保存 ---- */
+let _bookletSaveTimer = null;
+let _bookletSaving    = false;
+
+function scheduleBookletSave() {
+    clearTimeout(_bookletSaveTimer);
+    setBookletSaveStatus('unsaved');
+    _bookletSaveTimer = setTimeout(() => saveBooklet(true), 1500);
+}
+
+function setBookletSaveStatus(state) {
+    const el = document.getElementById('bookletSaveStatus');
+    if (!el) return;
+    if (state === 'saving')  { el.textContent = '保存中…';  el.className = 'small text-muted ms-2'; }
+    if (state === 'saved')   { el.textContent = '保存済み'; el.className = 'small text-success ms-2'; }
+    if (state === 'unsaved') { el.textContent = '未保存';   el.className = 'small text-warning ms-2'; }
+    if (state === 'error')   { el.textContent = '保存失敗'; el.className = 'small text-danger ms-2'; }
+}
+
+async function saveBooklet(auto = false) {
+    if (_bookletSaving) return;
+    _bookletSaving = true;
+    setBookletSaveStatus('saving');
+
+    const payload = {
+        meeting_time:      document.getElementById('bMeetingTime')?.value     || '8:40',
+        meeting_place:     document.getElementById('bMeetingPlace')?.value    || '新宿センタービル（地上）',
+        meeting_note:      document.getElementById('bMeetingNote')?.value     || '',
+        return_place:      document.getElementById('bReturnPlace')?.value     || '',
+        is_public:         document.getElementById('bIsPublic')?.checked ? 1 : 0,
+        floor_plan_image:  document.getElementById('bFloorPlanImage')?.value  || '',
+        team_battle_rules: document.getElementById('bTeamBattleRules')?.value || '',
+        kohaku_rules:      document.getElementById('bKohakuRules')?.value     || '',
+        items_to_bring:    _bookletData.items_to_bring    || [],
+        schedules:         _bookletData.schedules         || [],
+        team_battle_teams: _bookletData.team_battle_teams || [],
+        kohaku_teams:      _bookletData.kohaku_teams      || {red:[],white:[]},
+        kohaku_matches:    _bookletData.kohaku_matches    || [],
+        night_rec_groups:  _bookletData.night_rec_groups  || [],
+        room_assignments:  _bookletData.room_assignments  || [],
+        meal_duty:         _bookletData.meal_duty         || [],
+    };
+
+    try {
+        const res  = await fetch(`/api/camps/<?= (int)$campId ?>/booklet`, {
+            method: 'PUT',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (data.success) {
+            _bookletData = data.data;
+            setBookletSaveStatus('saved');
+            if (!auto) showToast('しおりを保存しました', 'success');
+        } else {
+            setBookletSaveStatus('error');
+            if (!auto) alert(data.error?.message || '保存に失敗しました');
+        }
+    } catch(e) {
+        setBookletSaveStatus('error');
+        if (!auto) alert('通信エラーが発生しました');
+    } finally {
+        _bookletSaving = false;
+    }
+}
+
+/* ---- 公開URL ---- */
+/* ---- 宿内平面図アップロード ---- */
+async function uploadFloorPlan(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const status = document.getElementById('floorPlanUploadStatus');
+    status.textContent = 'アップロード中…';
+    status.className = 'small text-muted';
+
+    const fd = new FormData();
+    fd.append('image', file);
+    try {
+        const res  = await fetch('/api/hp/upload', {method: 'POST', body: fd});
+        const data = await res.json();
+        if (data.success) {
+            document.getElementById('bFloorPlanImage').value = data.data.path;
+            document.getElementById('floorPlanPreview').innerHTML =
+                `<img src="${data.data.path}" class="img-fluid rounded" style="max-height:300px;" alt="平面図">
+                 <div class="mt-1"><button class="btn btn-outline-danger btn-sm py-0" onclick="removeFloorPlan()"><i class="bi bi-trash"></i> 削除</button></div>`;
+            status.textContent = 'アップロード完了';
+            status.className = 'small text-success';
+            scheduleBookletSave();
+        } else {
+            status.textContent = data.error?.message || 'アップロードに失敗しました';
+            status.className = 'small text-danger';
+        }
+    } catch(e) {
+        status.textContent = '通信エラーが発生しました';
+        status.className = 'small text-danger';
+    }
+    input.value = '';
+}
+function removeFloorPlan() {
+    document.getElementById('bFloorPlanImage').value = '';
+    document.getElementById('floorPlanPreview').innerHTML = '<p class="text-muted small mb-0">画像が設定されていません</p>';
+    scheduleBookletSave();
+}
+
+function copyBookletUrl() {
+    const el = document.getElementById('bookletPublicUrl');
+    if (el) { navigator.clipboard.writeText(el.value); alert('URLをコピーしました'); }
+}
+async function regenBookletToken() {
+    if (!confirm('公開URLを新しく発行しますか？（古いURLは無効になります）')) return;
+    try {
+        const res  = await fetch(`/api/camps/<?= (int)$campId ?>/booklet/token`, {method:'POST'});
+        const data = await res.json();
+        if (data.success) {
+            // サーバー側で is_public=1 にもなるので最新データで上書き
+            if (data.data.booklet) {
+                _bookletData = data.data.booklet;
+            } else {
+                _bookletData.public_token = data.data.token;
+                _bookletData.is_public = 1;
+            }
+            renderBookletEditor(_bookletData);
+        } else {
+            alert(data.error?.message || '発行に失敗しました');
+        }
+    } catch(e) {
+        alert('通信エラーが発生しました');
+    }
+}
+
+/* ---- 日程設定から取り込む ---- */
+async function importScheduleFromSlots() {
+    if (_bookletData.schedules && _bookletData.schedules.length > 0) {
+        if (!confirm('現在のタイムスケジュールを日程設定から上書きします。よろしいですか？')) return;
+    }
+    try {
+        const res  = await fetch(`/api/camps/<?= (int)$campId ?>/booklet/import-schedule`);
+        const data = await res.json();
+        if (data.success) {
+            _bookletData.schedules = data.data.schedules;
+            document.getElementById('schedulesDayList').innerHTML = renderScheduleDays(_bookletData.schedules);
+            // 取り込んだことを一瞬示す
+            const btn = document.querySelector('[onclick="importScheduleFromSlots()"]');
+            if (btn) { btn.textContent = '✓ 取り込み完了'; setTimeout(() => btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> 日程設定から取り込む', 2000); }
+        } else {
+            alert(data.error?.message || '取り込みに失敗しました');
+        }
+    } catch(e) {
+        alert('通信エラーが発生しました');
+    }
+}
+
+/* ---- 参加者選択モーダル ---- */
+let _pickerDisabled = new Set();
+
+let _pickerMaxSelect = 0; // 0 = 無制限
+
+function openPicker(title, preSelected, onApply, disabledNames = [], singleMode = false, maxSelect = 0) {
+    _pickerCallback = onApply;
+    _pickerSingleMode = singleMode;
+    _pickerMaxSelect  = maxSelect;
+    _pickerSelected = new Set(preSelected.map(n => String(n)));
+    _pickerDisabled = new Set(disabledNames.map(n => String(n)));
+    document.getElementById('pickerModalTitle').textContent = title;
+    document.getElementById('pickerSearch').value = '';
+    document.getElementById('pickerGradeFilter').value = '';
+    document.getElementById('pickerGenderFilter').value = '';
+    renderPickerList();
+    new bootstrap.Modal(document.getElementById('participantPickerModal')).show();
+}
+
+function renderPickerList() {
+    const search  = document.getElementById('pickerSearch').value.toLowerCase();
+    const grade   = document.getElementById('pickerGradeFilter').value;
+    const gender  = document.getElementById('pickerGenderFilter').value;
+    const gradeLabels = {0:'OB/OG',1:'1年',2:'2年',3:'3年',4:'4年',5:'5年'};
+
+    const filtered = (_allParticipants || []).filter(p => {
+        if (search  && !p.name.includes(search)) return false;
+        if (gender  && p.gender !== gender) return false;
+        if (grade !== '') {
+            if (grade === '4') { if (p.grade < 4) return false; }
+            else if (String(p.grade) !== grade) return false;
+        }
+        return true;
+    });
+
+    const gradeOrder = {};
+    filtered.forEach(p => { gradeOrder[p.grade] = gradeOrder[p.grade] || []; gradeOrder[p.grade].push(p); });
+
+    let html = '';
+    Object.keys(gradeOrder).sort((a,b) => Number(a)-Number(b)).forEach(g => {
+        const gLabel = gradeLabels[g] || `${g}年`;
+        html += `<div class="text-muted small fw-bold px-1 mt-2 mb-1">${gLabel}</div>`;
+        html += '<div class="row g-1">';
+        gradeOrder[g].forEach(p => {
+            const disabled = _pickerDisabled.has(p.name);
+            const chk = _pickerSelected.has(p.name) ? 'checked' : '';
+            const genderBadge = p.gender === 'female' ? '<span class="badge bg-pink text-dark" style="background:#fce4ec!important;">女</span>' : '<span class="badge bg-light text-dark border">男</span>';
+            if (disabled) {
+                html += `<div class="col-md-4 col-6">
+                    <label class="d-flex align-items-center gap-1 p-1 border rounded picker-item" style="cursor:not-allowed;opacity:.4;background:#f8f9fa;">
+                        <input type="checkbox" class="form-check-input flex-shrink-0" disabled>
+                        ${genderBadge} <span class="small">${h(p.name)}</span>
+                    </label>
+                </div>`;
+            } else {
+                html += `<div class="col-md-4 col-6">
+                    <label class="d-flex align-items-center gap-1 p-1 border rounded picker-item" style="cursor:pointer;">
+                        <input type="checkbox" class="form-check-input flex-shrink-0" value="${h(p.name)}" ${chk} onchange="togglePicker('${h(p.name)}',this.checked)">
+                        ${genderBadge} <span class="small">${h(p.name)}</span>
+                    </label>
+                </div>`;
+            }
+        });
+        html += '</div>';
+    });
+
+    if (!html) html = '<p class="text-muted text-center small p-3">該当する参加者がいません</p>';
+    document.getElementById('pickerList').innerHTML = html;
+    document.getElementById('pickerSelectedCount').textContent = _pickerMaxSelect > 0 ? `${_pickerSelected.size}／${_pickerMaxSelect}名選択中` : `${_pickerSelected.size}人選択中`;
+}
+
+function togglePicker(name, checked) {
+    if (checked) _pickerSelected.add(name); else _pickerSelected.delete(name);
+    document.getElementById('pickerSelectedCount').textContent = _pickerMaxSelect > 0 ? `${_pickerSelected.size}／${_pickerMaxSelect}名選択中` : `${_pickerSelected.size}人選択中`;
+}
+
+function filterPicker() { renderPickerList(); }
+
+function selectAllVisible() {
+    document.querySelectorAll('#pickerList input[type=checkbox]:not(:disabled)').forEach(cb => {
+        cb.checked = true; _pickerSelected.add(cb.value);
+    });
+    document.getElementById('pickerSelectedCount').textContent = _pickerMaxSelect > 0 ? `${_pickerSelected.size}／${_pickerMaxSelect}名選択中` : `${_pickerSelected.size}人選択中`;
+}
+
+function clearAllPicker() {
+    _pickerSelected.clear();
+    document.querySelectorAll('#pickerList input[type=checkbox]').forEach(cb => cb.checked = false);
+    document.getElementById('pickerSelectedCount').textContent = _pickerMaxSelect > 0 ? `0／${_pickerMaxSelect}名選択中` : '0人選択中';
+}
+
+function applyPickerSelection() {
+    bootstrap.Modal.getInstance(document.getElementById('participantPickerModal'))?.hide();
+    if (_pickerCallback) _pickerCallback([..._pickerSelected]);
+}
+
+/* ---- 団体戦：参加者から選択 ---- */
+function openPickerForTeamMember(ti) {
+    let preSelected = [];
+    let disabledNames = [];
+    if (ti !== null) {
+        preSelected = (_bookletData.team_battle_teams[ti]?.members || []).map(m => m.name);
+        (_bookletData.team_battle_teams || []).forEach((t, idx) => {
+            if (idx !== ti) t.members?.forEach(m => { if (m.name) disabledNames.push(m.name); });
+        });
+    } else {
+        (_bookletData.team_battle_teams || []).forEach(t => t.members?.forEach(m => preSelected.push(m.name)));
+    }
+
+    const title = ti !== null
+        ? `「${_bookletData.team_battle_teams[ti]?.team_name || 'チーム'}」のメンバーを選択`
+        : '団体戦チーム分け：参加者を選択';
+
+    openPicker(title, preSelected, (names) => {
+        if (ti !== null) {
+            const existing = new Map((_bookletData.team_battle_teams[ti].members || []).map(m => [m.name, m]));
+            _bookletData.team_battle_teams[ti].members = names.map(n => existing.get(n) || {name: n, is_leader: false});
+            document.getElementById(`teamMembers_${ti}`).innerHTML = renderTeamMembers(_bookletData.team_battle_teams[ti].members, ti);
+        } else {
+            const allExisting = new Set((_bookletData.team_battle_teams || []).flatMap(t => (t.members||[]).map(m=>m.name)));
+            names.filter(n => !allExisting.has(n)).forEach(n => {
+                if (!_bookletData.team_battle_teams.length) _bookletData.team_battle_teams.push({team_name:'チーム1',members:[]});
+                const target = _bookletData.team_battle_teams.reduce((a,b) => (a.members||[]).length <= (b.members||[]).length ? a : b);
+                target.members.push({name: n, is_leader: false});
+            });
+            document.getElementById('teamBattleTeamList').innerHTML = renderTeamBattleTeams(_bookletData.team_battle_teams);
+        }
+        scheduleBookletSave();
+    }, disabledNames);
+}
+
+/* ---- 紅白戦：参加者から選択 ---- */
+function openPickerForKohaku() {
+    const preSelected = (_bookletData.kohaku_teams?.red || []).map(m => m.name);
+    const disabledNames = (_bookletData.kohaku_teams?.white || []).map(m => m.name).filter(n => n);
+    openPicker('紅白戦 赤組のメンバーを選択', preSelected, (names) => {
+        _bookletData.kohaku_teams = _bookletData.kohaku_teams || {red:[],white:[]};
+        const existing = new Map((_bookletData.kohaku_teams.red||[]).map(m=>[m.name,m]));
+        _bookletData.kohaku_teams.red = names.map(n => existing.get(n) || {name:n});
+        document.getElementById('kohakuRedList').innerHTML = renderKohakuMembers(_bookletData.kohaku_teams.red, 'red');
+        scheduleBookletSave();
+    }, disabledNames);
+}
+function openPickerForKohakuWhite() {
+    const preSelected = (_bookletData.kohaku_teams?.white || []).map(m => m.name);
+    const disabledNames = (_bookletData.kohaku_teams?.red || []).map(m => m.name).filter(n => n);
+    openPicker('紅白戦 白組のメンバーを選択', preSelected, (names) => {
+        _bookletData.kohaku_teams = _bookletData.kohaku_teams || {red:[],white:[]};
+        const existing = new Map((_bookletData.kohaku_teams.white||[]).map(m=>[m.name,m]));
+        _bookletData.kohaku_teams.white = names.map(n => existing.get(n) || {name:n});
+        document.getElementById('kohakuWhiteList').innerHTML = renderKohakuMembers(_bookletData.kohaku_teams.white, 'white');
+        scheduleBookletSave();
+    }, disabledNames);
+}
+
+/* ---- 夜レク：参加者から選択 ---- */
+function openPickerForNightRec(gi) {
+    let preSelected = [];
+    let disabledNames = [];
+    if (gi !== null) {
+        preSelected = (_bookletData.night_rec_groups[gi]?.members || []).map(m => m.name);
+        (_bookletData.night_rec_groups || []).forEach((g, idx) => {
+            if (idx !== gi) g.members?.forEach(m => { if (m.name) disabledNames.push(m.name); });
+        });
+    } else {
+        (_bookletData.night_rec_groups || []).forEach(g => g.members?.forEach(m => preSelected.push(m.name)));
+    }
+
+    const title = gi !== null
+        ? `「${_bookletData.night_rec_groups[gi]?.group_name || '班'}」のメンバーを選択`
+        : '夜レク班分け：参加者を選択';
+
+    openPicker(title, preSelected, (names) => {
+        if (gi !== null) {
+            const existing = new Map((_bookletData.night_rec_groups[gi].members || []).map(m => [m.name, m]));
+            _bookletData.night_rec_groups[gi].members = names.map(n => existing.get(n) || {name:n});
+            document.getElementById(`nrecMembers_${gi}`).innerHTML = renderNightRecMembers(_bookletData.night_rec_groups[gi].members, gi);
+        } else {
+            const allExisting = new Set((_bookletData.night_rec_groups || []).flatMap(g => (g.members||[]).map(m=>m.name)));
+            names.filter(n => !allExisting.has(n)).forEach(n => {
+                if (!_bookletData.night_rec_groups.length) _bookletData.night_rec_groups.push({group_name:'1班',members:[]});
+                const target = _bookletData.night_rec_groups.reduce((a,b) => (a.members||[]).length <= (b.members||[]).length ? a : b);
+                target.members.push({name:n});
+            });
+            document.getElementById('nightRecGroupList').innerHTML = renderNightRecGroups(_bookletData.night_rec_groups);
+        }
+        scheduleBookletSave();
+    }, disabledNames);
+}
+</script>

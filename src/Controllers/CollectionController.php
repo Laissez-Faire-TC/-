@@ -24,22 +24,51 @@ class CollectionController
         $collection = $this->collectionModel->findByCampId($campId);
 
         if (!$collection) {
+            // 計算結果の平均負担額をフォームのデフォルト金額として提案する
+            $suggestedAmount = null;
+            try {
+                $calculationService = new CalculationService();
+                $calc = $calculationService->calculate($campId);
+                if (!empty($calc['summary']['average_amount'])) {
+                    $suggestedAmount = (int)$calc['summary']['average_amount'];
+                }
+            } catch (Exception $e) {
+                // 計算失敗時はnullのまま（フォームは空欄で表示）
+            }
+
             Response::success([
-                'collection'  => null,
-                'submitted'   => [],
-                'unsubmitted' => [],
+                'collection'      => null,
+                'submitted'       => [],
+                'unsubmitted'     => [],
+                'suggested_amount' => $suggestedAmount,
             ]);
             return;
         }
+
+        // 後から申し込んだ参加者を自動的に追加（INSERT IGNORE なので既存行は重複しない）
+        $this->collectionModel->initializeItems((int)$collection['id'], $campId);
 
         $allItems    = $this->itemModel->getByCollectionId((int)$collection['id']);
         $submitted   = array_values(array_filter($allItems, fn($i) => (int)$i['submitted'] === 1));
         $unsubmitted = array_values(array_filter($allItems, fn($i) => (int)$i['submitted'] === 0));
 
+        // 計算結果の平均負担額を提案値として含める
+        $suggestedAmount = null;
+        try {
+            $calculationService = new CalculationService();
+            $calc = $calculationService->calculate($campId);
+            if (!empty($calc['summary']['average_amount'])) {
+                $suggestedAmount = (int)$calc['summary']['average_amount'];
+            }
+        } catch (Exception $e) {
+            // 計算失敗時はnullのまま
+        }
+
         Response::success([
-            'collection'  => $collection,
-            'submitted'   => $submitted,
-            'unsubmitted' => $unsubmitted,
+            'collection'       => $collection,
+            'submitted'        => $submitted,
+            'unsubmitted'      => $unsubmitted,
+            'suggested_amount' => $suggestedAmount,
         ]);
     }
 

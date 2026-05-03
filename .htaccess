@@ -5,8 +5,7 @@ RewriteBase /
 RewriteCond %{HTTPS} off
 RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
-# Allow access to public files
-RewriteCond %{REQUEST_URI} ^/public/ [OR]
+# Allow access to actual static files only
 RewriteCond %{REQUEST_FILENAME} -f
 RewriteRule ^ - [L]
 
