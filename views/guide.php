@@ -13,28 +13,33 @@
         </div>
         <div class="card-body">
             <div class="row">
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <ol>
                         <li><a href="#overview">アプリ概要</a></li>
                         <li><a href="#flow">基本的な流れ</a></li>
                         <li><a href="#create-camp">合宿を作成する</a></li>
                         <li><a href="#participants">参加者を登録する</a></li>
                         <li><a href="#partial">途中参加・途中抜けの設定</a></li>
-                    </ol>
-                </div>
-                <div class="col-md-6">
-                    <ol start="6">
                         <li><a href="#schedule">日程設定</a></li>
                         <li><a href="#expenses">雑費の登録</a></li>
+                    </ol>
+                </div>
+                <div class="col-md-4">
+                    <ol start="8">
                         <li><a href="#calculation">計算結果の確認</a></li>
                         <li><a href="#export">PDF/Excel出力</a></li>
                         <li><a href="#members">会員名簿管理</a></li>
                         <li><a href="#enrollment">入会フォーム</a></li>
                         <li><a href="#application">合宿申し込みフォーム</a></li>
                         <li><a href="#academic-years" class="text-primary"><strong>【NEW】年度管理</strong></a></li>
+                    </ol>
+                </div>
+                <div class="col-md-4">
+                    <ol start="14">
                         <li><a href="#events" class="text-primary"><strong>【NEW】企画管理</strong></a></li>
                         <li><a href="#collection" class="text-primary"><strong>【NEW】集金管理</strong></a></li>
                         <li><a href="#portal" class="text-primary"><strong>【NEW】会員ポータル</strong></a></li>
+                        <li><a href="#expeditions" class="text-primary"><strong>【NEW】遠征管理</strong></a></li>
                         <li><a href="#faq">よくある質問</a></li>
                         <li><a href="#contact">お問い合わせ</a></li>
                     </ol>
@@ -823,10 +828,70 @@
         </div>
     </div>
 
-    <!-- 17. よくある質問 -->
+    <!-- 17. 遠征管理（NEW） -->
+    <div class="card mb-4" id="expeditions">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">17. 遠征管理 <span class="badge bg-light text-primary">NEW</span></h5>
+        </div>
+        <div class="card-body">
+            <p class="lead">espajio OPENなどの対外試合遠征を管理します。参加者・車割・チーム分け・集金・しおりをまとめて管理できます。</p>
+
+            <h6>17.1 遠征の作成</h6>
+            <ol>
+                <li>サイドバーまたはナビから「遠征管理」をクリック</li>
+                <li>「+ 新規遠征作成」ボタンをクリック</li>
+                <li>以下の項目を入力:
+                    <ul>
+                        <li><strong>遠征名</strong>（例：espajio OPEN 2025秋）</li>
+                        <li><strong>開始日・終了日</strong></li>
+                        <li><strong>参加費・前泊費用</strong>（円）</li>
+                        <li><strong>場所・説明</strong></li>
+                    </ul>
+                </li>
+                <li>「保存」をクリック</li>
+            </ol>
+
+            <h6 class="mt-4">17.2 タブ構成</h6>
+            <table class="table table-bordered table-sm">
+                <thead class="table-light">
+                    <tr><th>タブ</th><th>内容</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>基本情報</td><td>遠征の基本設定・編集</td></tr>
+                    <tr><td>参加者管理</td><td>参加者の追加・編集・削除、Excel/PDF/名簿/エスパジオ登録ファイルの出力</td></tr>
+                    <tr><td>車割</td><td>往路・復路の車割を手動または自動作成。住所から推奨下車駅を解析</td></tr>
+                    <tr><td>チーム分け</td><td>対戦チームの編成・表示</td></tr>
+                    <tr><td>申し込みURL</td><td>会員向け申し込みURLの発行・管理</td></tr>
+                    <tr><td>集金管理</td><td>参加費の振り込み確認（合宿の集金管理と同様）</td></tr>
+                    <tr><td>しおり</td><td>遠征しおりの自動生成・公開URL発行</td></tr>
+                    <tr><td>レンタカー清算</td><td>レンタカー・ガソリン代の精算</td></tr>
+                </tbody>
+            </table>
+
+            <h6 class="mt-4">17.3 車割</h6>
+            <p>「往路を自動作成」「復路を自動作成」ボタンで、参加者の住所をもとに最適な車割を自動生成できます。</p>
+            <ul>
+                <li><strong>推奨下車駅の解析:</strong> 「解析」ボタンで各参加者の最寄り駅を自動判定</li>
+                <li><strong>手動調整:</strong> ドラッグ＆ドロップで乗車者を変更可能</li>
+                <li><strong>往路・復路別:</strong> 往路・復路それぞれ独立して設定可能</li>
+            </ul>
+
+            <h6 class="mt-4">17.4 しおり</h6>
+            <p>遠征しおりを自動生成して参加者に公開URLで共有できます。</p>
+            <ul>
+                <li>基本情報・スケジュール・参加者名簿・車割が自動でまとめられます</li>
+                <li>「公開URL」をコピーしてLINE等で参加者に共有</li>
+            </ul>
+
+            <h6 class="mt-4">17.5 遠征申し込みフォーム</h6>
+            <p>合宿申し込みと同様に、会員が専用URLから申し込みできます。「申し込みURL」タブでURLを発行し、会員に共有してください。</p>
+        </div>
+    </div>
+
+    <!-- 18. よくある質問 -->
     <div class="card mb-4" id="faq">
         <div class="card-header">
-            <h5 class="mb-0">13. よくある質問</h5>
+            <h5 class="mb-0">18. よくある質問</h5>
         </div>
         <div class="card-body">
             <div class="accordion" id="faqAccordion">

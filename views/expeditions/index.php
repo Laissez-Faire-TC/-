@@ -42,6 +42,26 @@
                         </div>
                     </div>
 
+                    <h6 class="border-bottom pb-2 mb-3 mt-4">定員設定</h6>
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label">男性定員</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="expeditionCapacityMale" min="0" placeholder="無制限">
+                                <span class="input-group-text">名</span>
+                            </div>
+                            <div class="form-text">空欄=制限なし</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">女性定員</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="expeditionCapacityFemale" min="0" placeholder="無制限">
+                                <span class="input-group-text">名</span>
+                            </div>
+                            <div class="form-text">空欄=制限なし</div>
+                        </div>
+                    </div>
+
                     <h6 class="border-bottom pb-2 mb-3 mt-4">費用設定</h6>
                     <div class="row mb-3">
                         <div class="col-md-4">
@@ -190,13 +210,17 @@ function showCreateModal() {
 
 // 新規作成フォーム送信
 async function createExpedition(e) {
+    const capMale   = document.getElementById('expeditionCapacityMale').value.trim();
+    const capFemale = document.getElementById('expeditionCapacityFemale').value.trim();
     const data = {
-        name: document.getElementById('expeditionName').value,
-        start_date: document.getElementById('expeditionStartDate').value,
-        end_date: document.getElementById('expeditionEndDate').value,
-        base_fee: parseInt(document.getElementById('expeditionBaseFee').value) || 0,
-        pre_night_fee: parseInt(document.getElementById('expeditionPreNightFee').value) || 0,
-        lunch_fee: parseInt(document.getElementById('expeditionLunchFee').value) || 0,
+        name:             document.getElementById('expeditionName').value,
+        start_date:       document.getElementById('expeditionStartDate').value,
+        end_date:         document.getElementById('expeditionEndDate').value,
+        base_fee:         parseInt(document.getElementById('expeditionBaseFee').value)      || 0,
+        pre_night_fee:    parseInt(document.getElementById('expeditionPreNightFee').value)  || 0,
+        lunch_fee:        parseInt(document.getElementById('expeditionLunchFee').value)     || 0,
+        capacity_male:    capMale   !== '' ? parseInt(capMale)   : null,
+        capacity_female:  capFemale !== '' ? parseInt(capFemale) : null,
     };
 
     try {

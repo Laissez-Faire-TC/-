@@ -10,7 +10,8 @@ class ExpeditionParticipant
     public static function findByExpedition(int $expedition_id): array
     {
         return Database::getInstance()->fetchAll(
-            "SELECT ep.*, m.name_kanji, m.name_kana, m.gender, m.grade, m.allergy, m.address
+            "SELECT ep.*, m.name_kanji, m.name_kana, m.gender, m.grade, m.allergy, m.address,
+                    ep.timescar_number
              FROM expedition_participants ep
              JOIN members m ON m.id = ep.member_id
              WHERE ep.expedition_id = ?

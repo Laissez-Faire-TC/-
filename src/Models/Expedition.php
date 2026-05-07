@@ -35,21 +35,23 @@ class Expedition
     public static function create(array $data): ?array
     {
         $sql = "INSERT INTO expeditions (
-            name, start_date, end_date, deadline, base_fee, pre_night_fee, lunch_fee,
-            capacity_male, capacity_female, expense_deadline
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            name, start_date, end_date, deadline, application_start, base_fee, pre_night_fee, lunch_fee,
+            capacity_male, capacity_female, expense_deadline, subsidy
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         $id = Database::getInstance()->insert($sql, [
             $data['name'],
             $data['start_date'],
             $data['end_date'],
-            $data['deadline'] ?? null,
-            $data['base_fee'] ?? 0,
-            $data['pre_night_fee'] ?? 0,
-            $data['lunch_fee'] ?? 0,
+            $data['deadline']           ?? null,
+            $data['application_start']  ?? null,
+            $data['base_fee']           ?? 0,
+            $data['pre_night_fee']      ?? 0,
+            $data['lunch_fee']          ?? 0,
             isset($data['capacity_male'])   && $data['capacity_male']   !== '' ? (int)$data['capacity_male']   : null,
             isset($data['capacity_female']) && $data['capacity_female'] !== '' ? (int)$data['capacity_female'] : null,
-            $data['expense_deadline'] ?? null,
+            $data['expense_deadline']   ?? null,
+            $data['subsidy']            ?? 0,
         ]);
 
         return self::findById($id);
@@ -65,9 +67,9 @@ class Expedition
 
         // 更新可能なフィールド
         $allowedFields = [
-            'name', 'start_date', 'end_date', 'deadline',
+            'name', 'start_date', 'end_date', 'deadline', 'application_start',
             'base_fee', 'pre_night_fee', 'lunch_fee',
-            'capacity_male', 'capacity_female', 'expense_deadline',
+            'capacity_male', 'capacity_female', 'expense_deadline', 'subsidy',
         ];
 
         foreach ($allowedFields as $field) {

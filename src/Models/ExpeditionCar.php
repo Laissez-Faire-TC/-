@@ -19,7 +19,7 @@ class ExpeditionCar
             // 乗車メンバーを取得
             $car['car_members'] = $db->fetchAll(
                 "SELECT ecm.*, m.name_kanji, m.name_kana,
-                        ep.friday_last_class
+                        ep.friday_last_class, ep.timescar_number
                  FROM expedition_car_members ecm
                  JOIN members m ON m.id = ecm.member_id
                  LEFT JOIN expedition_participants ep
@@ -211,7 +211,7 @@ class ExpeditionCar
      *
      * 戻り値: ['cars' => [...], 'warnings' => [...]]
      */
-    public static function autoAssignOutbound(int $expedition_id, array $capacities = []): array
+    public static function autoAssignOutbound(int $expedition_id, array $capacities = [], array $soloBookers = []): array
     {
         $db = Database::getInstance();
 
@@ -279,12 +279,37 @@ class ExpeditionCar
                 'name'            => $carName,
                 'departure_class' => $depClass,
                 'capacity'        => $capacity,
+                'booker_id'       => (int)$booker['member_id'],
             ];
         }
 
-        // booker 以外の参加者を適切な車に割り当て
-        $bookerIds  = array_map(fn($b) => (int)$b['member_id'], $bookers);
-        $unassigned = array_values(array_filter($participants, fn($p) => !in_array((int)$p['member_id'], $bookerIds)));
+        // booker 以外のドライバー能力がある参加者をサブドライバー候補プールに
+        $bookerIds     = array_map(fn($b) => (int)$b['member_id'], $bookers);
+        $subDriverPool = array_values(array_filter($participants, function ($p) use ($bookerIds) {
+            return !in_array((int)$p['member_id'], $bookerIds)
+                && in_array($p['driver_type'] ?? 'none', ['driver', 'sub_driver']);
+        }));
+        $assignedSubIds = [];
+
+        // 各車にサブドライバーを自動割り当て（solo_bookers 指定の車はスキップ）
+        foreach ($cars as &$car) {
+            if (in_array($car['booker_id'], $soloBookers)) continue;
+            foreach ($subDriverPool as $sd) {
+                if (in_array((int)$sd['member_id'], $assignedSubIds)) continue;
+                $db->insert(
+                    "INSERT INTO expedition_car_members (car_id, member_id, role, is_excluded, sort_order)
+                     VALUES (?, ?, 'sub_driver', 0, 1)",
+                    [$car['id'], $sd['member_id']]
+                );
+                $assignedSubIds[] = (int)$sd['member_id'];
+                break;
+            }
+        }
+        unset($car);
+
+        // booker + 割り当て済みサブドライバーを除いた参加者を乗客として配置
+        $preAssigned = array_unique(array_merge($bookerIds, $assignedSubIds));
+        $unassigned  = array_values(array_filter($participants, fn($p) => !in_array((int)$p['member_id'], $preAssigned)));
         $lastCar    = end($cars);
 
         foreach ($unassigned as $participant) {
@@ -347,9 +372,16 @@ class ExpeditionCar
                 : '';
             $carLabel = $car['name'] . ($depLabel ? "（{$depLabel}）" : '');
 
+            // booker が solo 指定の場合はサブドライバー不在でも警告しない
+            $bookerIdForCar = null;
+            foreach ($cars as $c) {
+                if ($c['id'] === $car['id']) { $bookerIdForCar = $c['booker_id'] ?? null; break; }
+            }
+            $isSolo = $bookerIdForCar !== null && in_array($bookerIdForCar, $soloBookers);
+
             if (!$hasSubDriver && !$hasDriver) {
                 $warnings[] = "【{$carLabel}】ドライバーがいません";
-            } elseif (!$hasSubDriver) {
+            } elseif (!$hasSubDriver && !$isSolo) {
                 $warnings[] = "【{$carLabel}】サブドライバーがいません（ドライバー1人のみ）";
             }
         }

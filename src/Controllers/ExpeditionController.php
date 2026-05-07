@@ -53,7 +53,7 @@ class ExpeditionController
      */
     public function update(array $params): void
     {
-        $data       = Request::only(['name', 'start_date', 'end_date', 'deadline', 'base_fee', 'pre_night_fee', 'lunch_fee', 'capacity_male', 'capacity_female', 'expense_deadline']);
+        $data       = Request::only(['name', 'start_date', 'end_date', 'deadline', 'application_start', 'base_fee', 'pre_night_fee', 'lunch_fee', 'capacity_male', 'capacity_female', 'expense_deadline', 'subsidy']);
         $expedition = Expedition::update($params['id'], $data);
         Response::success($expedition);
     }
@@ -226,9 +226,10 @@ class ExpeditionController
     public function autoAssignCars(array $params): void
     {
         Auth::requireAuth();
-        $body       = Request::json();
-        $capacities = $body['capacities'] ?? [];
-        $result     = ExpeditionCar::autoAssignOutbound((int)$params['id'], $capacities);
+        $body        = Request::json();
+        $capacities  = $body['capacities']   ?? [];
+        $soloBookers = is_array($body['solo_bookers'] ?? null) ? array_map('intval', $body['solo_bookers']) : [];
+        $result      = ExpeditionCar::autoAssignOutbound((int)$params['id'], $capacities, $soloBookers);
         Response::success($result);
     }
 
@@ -435,20 +436,26 @@ class ExpeditionController
      */
     public function getApplicationUrl(array $params): void
     {
-        $token = ExpeditionToken::findByExpedition($params['id']);
+        $expedition = Expedition::findById($params['id']);
+        $token      = ExpeditionToken::findByExpedition($params['id']);
+
+        $base = [
+            'deadline'          => $expedition['deadline']          ?? null,
+            'application_start' => $expedition['application_start'] ?? null,
+        ];
 
         if (!$token) {
-            Response::success(['has_token' => false]);
+            Response::success(array_merge($base, ['has_token' => false]));
             return;
         }
 
-        // expires_at を deadline としてマッピングし、有効期限チェック
-        $expiresAt  = $token['expires_at'] ?? null;
-        $isExpired  = $expiresAt && strtotime($expiresAt) < time();
-        $baseUrl    = (isset($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'];
-        $applyUrl   = $baseUrl . '/apply/expedition/' . $token['token'];
+        // expires_at の有効期限チェック
+        $expiresAt = $token['expires_at'] ?? null;
+        $isExpired = $expiresAt && strtotime($expiresAt) < time();
+        $baseUrl   = (isset($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'];
+        $applyUrl  = $baseUrl . '/apply/expedition/' . $token['token'];
 
-        Response::success([
+        Response::success(array_merge($base, [
             'has_token' => true,
             'url'       => $applyUrl,
             'token'     => [
@@ -457,7 +464,7 @@ class ExpeditionController
                 'is_active' => $isExpired ? 0 : 1,
                 'deadline'  => $expiresAt,
             ],
-        ]);
+        ]));
     }
 
     /**

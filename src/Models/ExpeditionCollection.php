@@ -112,7 +112,7 @@ class ExpeditionCollection
 
         // 集金と遠征の料金情報を取得
         $collection = $db->fetch(
-            "SELECT ec.*, e.base_fee, e.pre_night_fee, e.lunch_fee
+            "SELECT ec.*, e.base_fee, e.pre_night_fee, e.lunch_fee, e.subsidy
              FROM expedition_collections ec
              JOIN expeditions e ON e.id = ec.expedition_id
              WHERE ec.id = ?",
@@ -132,6 +132,13 @@ class ExpeditionCollection
                 [$expedition_id]
             );
 
+            // 補助金を人数で割って一人あたりの減額を算出（端数切り捨て）
+            $subsidy       = (int)($collection['subsidy'] ?? 0);
+            $participantN  = count($participants);
+            $subsidyPerPerson = ($participantN > 0 && $subsidy > 0)
+                ? (int)floor($subsidy / $participantN)
+                : 0;
+
             foreach ($participants as $participant) {
                 $amount = (int)$collection['base_fee'];
                 if ((int)$participant['pre_night'] === 1) {
@@ -140,6 +147,8 @@ class ExpeditionCollection
                 if ((int)$participant['lunch'] === 1) {
                     $amount += (int)$collection['lunch_fee'];
                 }
+                // 補助金減額（0未満にはしない）
+                $amount = max(0, $amount - $subsidyPerPerson);
 
                 $db->insert(
                     "INSERT INTO expedition_collection_items (collection_id, member_id, amount) VALUES (?, ?, ?)",

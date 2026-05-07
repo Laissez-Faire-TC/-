@@ -41,7 +41,23 @@
 
     <!-- ===== タブ1: 基本情報 ===== -->
     <div class="tab-pane fade show active" id="tabBasic">
-        <div id="basicInfo">読み込み中...</div>
+        <!-- サブタブ -->
+        <ul class="nav nav-tabs mb-3" id="basicSubTabs">
+            <li class="nav-item">
+                <a class="nav-link active" data-bs-toggle="tab" href="#basicSubInfo">基本情報</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" data-bs-toggle="tab" href="#basicSubSubsidy">補助金</a>
+            </li>
+        </ul>
+        <div class="tab-content">
+            <div class="tab-pane fade show active" id="basicSubInfo">
+                <div id="basicInfo">読み込み中...</div>
+            </div>
+            <div class="tab-pane fade" id="basicSubSubsidy">
+                <div id="subsidyInfo">読み込み中...</div>
+            </div>
+        </div>
     </div>
 
     <!-- ===== タブ2: 参加者管理 ===== -->
@@ -474,6 +490,7 @@ async function loadBasicInfo() {
         const data = await res.json();
         if (data.success) {
             renderBasicInfo(data.data);
+            renderSubsidyInfo(data.data);
             document.getElementById('expeditionTitle').textContent = data.data.name || '遠征詳細';
         } else {
             document.getElementById('basicInfo').innerHTML = '<div class="alert alert-danger">読み込みに失敗しました</div>';
@@ -523,12 +540,6 @@ function renderBasicInfo(e) {
                             <label class="form-label">終了日</label>
                             <input type="date" class="form-control" id="editEndDate" value="${e.end_date || ''}"
                                    onchange="scheduleBasicSave()">
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label">申込期限</label>
-                            <input type="date" class="form-control" id="editDeadline" value="${e.deadline || ''}"
-                                   onchange="scheduleBasicSave()">
-                            <div class="form-text">空欄=期限なし</div>
                         </div>
                     </div>
                     <div class="row mb-3">
@@ -584,6 +595,120 @@ function renderBasicInfo(e) {
     `;
 }
 
+function renderSubsidyInfo(e) {
+    // API レスポンスの participants（show エンドポイントで付与）か participantsCache を使用
+    const ptList         = e.participants || participantsCache || [];
+    const confirmedCount = ptList.filter(p => p.status === 'confirmed').length;
+    const subsidy        = parseInt(e.subsidy) || 0;
+    const perPerson      = confirmedCount > 0 ? Math.floor(subsidy / confirmedCount) : 0;
+    const baseFee        = parseInt(e.base_fee) || 0;
+    const effectiveFee   = Math.max(0, baseFee - perPerson);
+
+    document.getElementById('subsidyInfo').innerHTML = `
+        <div class="card">
+            <div class="card-header">補助金設定</div>
+            <div class="card-body">
+                <div class="row g-3 align-items-end mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label">補助金額（全体）</label>
+                        <div class="input-group">
+                            <span class="input-group-text">¥</span>
+                            <input type="number" class="form-control" id="editSubsidy" min="0" value="${subsidy}"
+                                   oninput="updateSubsidyPreview()">
+                        </div>
+                        <div class="form-text">参加費から人数で割って減額されます</div>
+                    </div>
+                    <div class="col-md-3">
+                        <button class="btn btn-primary" onclick="saveSubsidy()">保存</button>
+                        <span id="subsidySaved" class="text-success ms-2 d-none">保存しました</span>
+                    </div>
+                </div>
+                <div class="card bg-light p-3" id="subsidyPreview">
+                    <div class="row text-center">
+                        <div class="col-md-3">
+                            <div class="text-muted small">確定参加者数</div>
+                            <div class="fw-bold" id="previewCount">${confirmedCount} 人</div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-muted small">一人あたり減額</div>
+                            <div class="fw-bold text-danger" id="previewPerPerson">¥${perPerson.toLocaleString()}</div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-muted small">設定参加費</div>
+                            <div class="fw-bold">¥${baseFee.toLocaleString()}</div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-muted small">実質参加費</div>
+                            <div class="fw-bold text-success" id="previewEffective">¥${effectiveFee.toLocaleString()}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="alert alert-info small mt-3 mb-0">
+                    <i class="bi bi-info-circle"></i>
+                    保存すると第1回集金データが自動で再生成されます。端数は切り捨てです。
+                </div>
+            </div>
+        </div>`;
+
+    // 入力値変更時のリアルタイムプレビュー用に参加者数を保持
+    window._subsidyConfirmedCount = confirmedCount;
+    window._subsidyBaseFee        = baseFee;
+}
+
+function updateSubsidyPreview() {
+    const subsidy      = parseInt(document.getElementById('editSubsidy').value) || 0;
+    const count        = window._subsidyConfirmedCount || 0;
+    const baseFee      = window._subsidyBaseFee || 0;
+    const perPerson    = count > 0 ? Math.floor(subsidy / count) : 0;
+    const effectiveFee = Math.max(0, baseFee - perPerson);
+    document.getElementById('previewPerPerson').textContent  = '¥' + perPerson.toLocaleString();
+    document.getElementById('previewEffective').textContent  = '¥' + effectiveFee.toLocaleString();
+}
+
+async function saveSubsidy() {
+    const subsidy = parseInt(document.getElementById('editSubsidy').value) || 0;
+    try {
+        const res = await fetch(`/api/expeditions/${expeditionId}`, {
+            method:  'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ subsidy }),
+        });
+        const data = await res.json();
+        if (!data.success) {
+            alert(data.error?.message || '保存に失敗しました');
+            return;
+        }
+
+        const el = document.getElementById('subsidySaved');
+        el.classList.remove('d-none');
+        setTimeout(() => el.classList.add('d-none'), 3000);
+
+        // 第1回集金が既に生成済みであれば自動で再生成
+        const colRes  = await fetch(`/api/expeditions/${expeditionId}/collection`);
+        const colData = await colRes.json();
+        if (colData.success) {
+            const round1 = (colData.data || []).find(c => Number(c.round) === 1);
+            if (round1) {
+                // 再生成（確認なし）
+                await fetch(`/api/expeditions/${expeditionId}/collection/generate`, {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ round: 1 }),
+                });
+                // 集金タブが開いていれば再描画
+                collectionLoaded = false;
+                if (document.getElementById('tabCollection')?.classList.contains('show')) {
+                    await loadCollection();
+                }
+                el.textContent = '保存・集金データを更新しました';
+                setTimeout(() => { el.classList.add('d-none'); el.textContent = '保存しました'; }, 3000);
+            }
+        }
+    } catch (err) {
+        alert('通信エラーが発生しました');
+    }
+}
+
 async function saveBasicInfo(auto = false) {
     const name = document.getElementById('editName')?.value.trim();
     if (!name) return; // イベント名未入力時はスキップ
@@ -595,7 +720,7 @@ async function saveBasicInfo(auto = false) {
         name:             name,
         start_date:       document.getElementById('editStartDate').value || null,
         end_date:         document.getElementById('editEndDate').value || null,
-        deadline:         document.getElementById('editDeadline').value || null,
+
         base_fee:         parseInt(document.getElementById('editBaseFee').value) || 0,
         pre_night_fee:    parseInt(document.getElementById('editPreNightFee').value) || 0,
         lunch_fee:        parseInt(document.getElementById('editLunchFee').value) || 0,
@@ -676,23 +801,50 @@ function renderParticipants(participants) {
     const confirmed  = participants.filter(p => p.status === 'confirmed');
     const waitlisted = participants.filter(p => p.status === 'waitlisted');
 
-    const driverLabel = { driver: '<span class="badge bg-primary">ドライバー</span>', sub_driver: '<span class="badge bg-info text-dark">サブ</span>', none: '' };
-    const classLabel  = (v) => v == null ? '' : v == 0 ? '早出' : `${v}限後`;
-
     const makeRows = (list) => list.map(p => {
         const gradeGender  = getGradeGenderLabel(p.grade, p.gender);
         const allergyHtml  = p.allergy
             ? `<span class="text-danger" title="${escapeHtml(p.allergy)}">${escapeHtml(p.allergy.length > 20 ? p.allergy.slice(0, 20) + '…' : p.allergy)}</span>`
             : '<span class="text-muted small">なし</span>';
-        const carHtml = p.is_joining_car == 0
-            ? '<span class="text-muted small">乗らない</span>'
-            : `${driverLabel[p.driver_type] || ''} <span class="text-muted small">${classLabel(p.friday_last_class)}</span>`;
+
+        // 車に乗るか チェックボックス
+        const joiningCheck = `<input type="checkbox" class="form-check-input" ${p.is_joining_car != 0 ? 'checked' : ''}
+            onchange="updateParticipant(${p.id}, 'is_joining_car', this.checked ? 1 : 0)">`;
+
+        // 役割 セレクト
+        const roleSelect = `<select class="form-select form-select-sm" style="width:auto;min-width:90px"
+            onchange="updateParticipant(${p.id}, 'driver_type', this.value)">
+            <option value="none"       ${(p.driver_type || 'none') === 'none'       ? 'selected' : ''}>乗客</option>
+            <option value="driver"     ${(p.driver_type || 'none') === 'driver'     ? 'selected' : ''}>ドライバー</option>
+            <option value="sub_driver" ${(p.driver_type || 'none') === 'sub_driver' ? 'selected' : ''}>サブドライバー</option>
+        </select>`;
+
+        // 何限終わりか セレクト
+        const classSelect = `<select class="form-select form-select-sm" style="width:auto;min-width:80px"
+            onchange="updateParticipant(${p.id}, 'friday_last_class', this.value === '' ? null : parseInt(this.value))">
+            <option value="" ${p.friday_last_class == null ? 'selected' : ''}>—</option>
+            <option value="0" ${p.friday_last_class == 0 ? 'selected' : ''}>早出</option>
+            ${[1,2,3,4,5,6].map(n => `<option value="${n}" ${p.friday_last_class == n ? 'selected' : ''}>${n}限後</option>`).join('')}
+        </select>`;
+
+        // 車を予約するか チェックボックス
+        const bookCheck = `<input type="checkbox" class="form-check-input" ${p.can_book_car == 1 ? 'checked' : ''}
+            onchange="updateParticipant(${p.id}, 'can_book_car', this.checked ? 1 : 0)">`;
+
+        const timescarHtml = p.timescar_number
+            ? `<span class="small">${escapeHtml(p.timescar_number)}</span>`
+            : '<span class="text-muted small">—</span>';
+
         return `
         <tr>
             <td>${escapeHtml(p.name_kanji)}</td>
             <td class="text-center small">${escapeHtml(gradeGender)}</td>
             <td>${allergyHtml}</td>
-            <td class="text-center">${carHtml}</td>
+            <td class="text-center">${joiningCheck}</td>
+            <td>${roleSelect}</td>
+            <td>${classSelect}</td>
+            <td class="text-center">${bookCheck}</td>
+            <td class="text-center small">${timescarHtml}</td>
             <td class="text-center">
                 <input type="checkbox" ${p.pre_night ? 'checked' : ''}
                     onchange="updateParticipant(${p.id}, 'pre_night', this.checked)">
@@ -711,13 +863,17 @@ function renderParticipants(participants) {
         </tr>`;
     }).join('');
 
-    const tableHtml = (rows, emptyMsg) => rows ? `<tbody>${rows}</tbody>` : `<tbody><tr><td colspan="8" class="text-muted">${emptyMsg}</td></tr></tbody>`;
+    const tableHtml = (rows, emptyMsg) => rows ? `<tbody>${rows}</tbody>` : `<tbody><tr><td colspan="12" class="text-muted">${emptyMsg}</td></tr></tbody>`;
     const thead = (cls) => `<thead class="${cls}">
         <tr>
             <th>名前</th>
             <th class="text-center">学年性別</th>
             <th>アレルギー</th>
-            <th>車</th>
+            <th class="text-center">乗車</th>
+            <th>役割</th>
+            <th>時限</th>
+            <th class="text-center">車予約</th>
+            <th class="text-center">タイムズ番号</th>
             <th class="text-center">前泊</th>
             <th class="text-center">昼食</th>
             <th></th>
@@ -1004,6 +1160,9 @@ function renderCarList(cars, tripType) {
                      : m.friday_last_class == 0    ? '早出'
                      : m.friday_last_class + '限';
             }
+            const timescarHtml = m.timescar_number
+                ? `<span class="small">${escapeHtml(m.timescar_number)}</span>`
+                : '<span class="text-muted small">—</span>';
             return `
             <tr>
                 <td>${escapeHtml(m.name_kanji)}</td>
@@ -1015,6 +1174,7 @@ function renderCarList(cars, tripType) {
                     </select>
                 </td>
                 <td class="text-center small text-muted">${col3}</td>
+                <td class="text-center small">${timescarHtml}</td>
                 <td>
                     <button class="btn btn-outline-danger btn-sm py-0" onclick="deleteCarMember(${car.id}, ${m.id})">削除</button>
                 </td>
@@ -1049,6 +1209,7 @@ function renderCarList(cars, tripType) {
                                     <th>名前</th>
                                     <th>役割</th>
                                     <th class="text-center">${isReturn ? '推奨下車駅 / 最寄り駅' : '時限'}</th>
+                                    <th class="text-center">タイムズ番号</th>
                                     <th></th>
                                 </tr>
                             </thead>
@@ -1124,19 +1285,28 @@ async function addCar() {
 }
 
 async function autoAssignOutboundCars() {
-    // 参加者一覧から can_book_car=1 の人を取得してモーダルに表示
     try {
         const res  = await fetch(`/api/expeditions/${expeditionId}/participants`);
         const data = await res.json();
         if (!data.success) { alert('参加者の取得に失敗しました'); return; }
 
-        const bookers = (data.data || []).filter(p => parseInt(p.is_joining_car) === 1 && parseInt(p.can_book_car) === 1);
+        const allParticipants = data.data || [];
+        const bookers = allParticipants.filter(p => parseInt(p.is_joining_car) === 1 && parseInt(p.can_book_car) === 1);
         if (bookers.length === 0) {
-            alert('車を予約できる人が登録されていません。\n申し込み時に「車の予約をする」を選択した参加者が必要です。');
+            alert('車を予約できる人が登録されていません。\n参加者管理タブで「車予約」にチェックを入れてください。');
             return;
         }
 
+        // ドライバー能力がある参加者の総数（役割がドライバーまたはサブドライバー）
+        const totalDrivers = allParticipants.filter(p =>
+            p.driver_type === 'driver' || p.driver_type === 'sub_driver'
+        ).length;
+
+        const carCount  = bookers.length;
+        const shortfall = carCount * 2 - totalDrivers; // 不足ドライバー数
+
         const classLabel = (v) => v == null ? '不明' : v == 0 ? '早出' : `${v}限後出発`;
+
         const rows = bookers.map(b => `
             <tr>
                 <td>${escapeHtml(b.name_kanji)}</td>
@@ -1148,10 +1318,29 @@ async function autoAssignOutboundCars() {
                         <span class="input-group-text">人</span>
                     </div>
                 </td>
-            </tr>
-        `).join('');
+                ${shortfall > 0 ? `<td class="text-center">
+                    <input type="checkbox" class="form-check-input solo-check" id="bookerSolo_${b.member_id}"
+                           value="${b.member_id}">
+                </td>` : ''}
+            </tr>`).join('');
+
+        const soloColHeader = shortfall > 0
+            ? `<th class="text-center">一人運転<span class="text-muted small ms-1">（${shortfall}台選択）</span></th>`
+            : '';
+
+        const shortfallAlert = shortfall > 0 ? `
+            <div class="alert alert-warning py-2 small mb-2">
+                <i class="bi bi-exclamation-triangle"></i>
+                ドライバー能力のある人が合計 ${totalDrivers} 人で、車 ${carCount} 台に2人ずつ配置するには ${shortfall} 人不足しています。<br>
+                <strong>一人で運転する車を ${shortfall} 台選んでください。</strong>
+            </div>` : `
+            <div class="alert alert-success py-2 small mb-2">
+                <i class="bi bi-check-circle"></i>
+                ドライバー ${totalDrivers} 人 / 車 ${carCount} 台。サブドライバーは自動で割り当てます。
+            </div>`;
 
         document.getElementById('autoAssignBookerList').innerHTML = `
+            ${shortfallAlert}
             <div class="table-responsive">
                 <table class="table table-sm">
                     <thead class="table-light">
@@ -1159,6 +1348,7 @@ async function autoAssignOutboundCars() {
                             <th>車を借りる人</th>
                             <th>出発時限</th>
                             <th>定員</th>
+                            ${soloColHeader}
                         </tr>
                     </thead>
                     <tbody>${rows}</tbody>
@@ -1169,7 +1359,8 @@ async function autoAssignOutboundCars() {
                 既存の往路の車はすべて削除され、上記の車に置き換わります
             </div>
         `;
-        window._autoAssignBookers = bookers;
+        window._autoAssignBookers  = bookers;
+        window._autoAssignShortfall = shortfall;
         carAutoAssignModal.show();
     } catch (err) {
         alert('通信エラーが発生しました');
@@ -1177,15 +1368,28 @@ async function autoAssignOutboundCars() {
 }
 
 async function executeCarAutoAssign() {
-    const bookers    = window._autoAssignBookers || [];
-    const capacities = {};
+    const bookers   = window._autoAssignBookers  || [];
+    const shortfall = window._autoAssignShortfall || 0;
+    const capacities  = {};
+    const soloBookers = [];
+
     for (const b of bookers) {
         capacities[b.member_id] = parseInt(document.getElementById(`bookerCap_${b.member_id}`).value, 10) || 5;
+        if (shortfall > 0 && document.getElementById(`bookerSolo_${b.member_id}`)?.checked) {
+            soloBookers.push(parseInt(b.member_id));
+        }
+    }
+
+    // 不足台数ちょうど選択されているか確認
+    if (shortfall > 0 && soloBookers.length !== shortfall) {
+        alert(`一人で運転する車をちょうど ${shortfall} 台選んでください（現在 ${soloBookers.length} 台）`);
+        carAutoAssignModal.show();
+        return;
     }
 
     // 定員合計チェック
-    const totalCapacity  = Object.values(capacities).reduce((s, v) => s + v, 0);
-    const joiningCount   = (participantsCache || []).filter(p => parseInt(p.is_joining_car) === 1).length;
+    const totalCapacity = Object.values(capacities).reduce((s, v) => s + v, 0);
+    const joiningCount  = (participantsCache || []).filter(p => parseInt(p.is_joining_car) === 1).length;
     if (joiningCount > 0 && totalCapacity < joiningCount) {
         const ok = confirm(
             `定員合計（${totalCapacity}人）が乗車予定人数（${joiningCount}人）より少ないです。\n` +
@@ -1200,7 +1404,7 @@ async function executeCarAutoAssign() {
         const res    = await fetch(`/api/expeditions/${expeditionId}/cars/auto-assign`, {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ capacities }),
+            body:    JSON.stringify({ capacities, solo_bookers: soloBookers }),
         });
         const result = await res.json();
         if (result.success) {
@@ -1403,14 +1607,15 @@ let carsCache = [];
 
 function showAddCarMemberModal(cid) {
     currentCarId = cid;
-    // 既にいずれかの車に乗っている member_id を収集
-    const assignedIds = new Set(
-        carsCache.flatMap(c => (c.car_members || []).map(m => parseInt(m.member_id)))
+    // 現在の車に既に乗っている member_id だけ除外（往路・復路は別車に乗れる）
+    const thisCar = carsCache.find(c => c.id === cid);
+    const assignedInThisCar = new Set(
+        (thisCar?.car_members || []).map(m => parseInt(m.member_id))
     );
     const sel = document.getElementById('carMemberSelect');
-    const options = participantsCache.filter(p => !assignedIds.has(parseInt(p.member_id)));
+    const options = participantsCache.filter(p => !assignedInThisCar.has(parseInt(p.member_id)));
     if (options.length === 0) {
-        alert('全ての参加者がすでにいずれかの車に割り当て済みです');
+        alert('全ての参加者がすでにこの車に追加済みです');
         return;
     }
     sel.innerHTML = options.map(p =>
@@ -1932,6 +2137,34 @@ function renderApplicationUrl(data) {
 
     let html = '<h4 class="mb-3">申し込みURL管理</h4>';
 
+    // 申込み期間設定カード（URL有無に関わらず常に表示）
+    const appStart   = data.application_start || '';
+    const appDeadline = data.deadline || '';
+    html += `
+        <div class="card mb-3">
+            <div class="card-header bg-light"><strong>申込み期間設定</strong></div>
+            <div class="card-body">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-5">
+                        <label class="form-label">申込み開始日時</label>
+                        <input type="datetime-local" class="form-control" id="editApplicationStart"
+                               value="${escapeHtml(appStart.replace(' ', 'T').substring(0, 16))}">
+                        <div class="form-text">空欄=即時受付</div>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label">申込み締切日</label>
+                        <input type="date" class="form-control" id="editDeadline"
+                               value="${escapeHtml(appDeadline)}">
+                        <div class="form-text">空欄=期限なし</div>
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-primary w-100" onclick="saveApplicationSchedule()">保存</button>
+                    </div>
+                </div>
+                <div id="appScheduleSaved" class="text-success mt-2 d-none">保存しました</div>
+            </div>
+        </div>`;
+
     if (data.has_token) {
         const token     = data.token;
         const isActive  = token.is_active == 1;
@@ -1959,10 +2192,6 @@ function renderApplicationUrl(data) {
                                 : '<span class="badge bg-secondary">無効</span>'}
                         </div>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">有効期限:</label>
-                        <p class="mb-0">${token.deadline ? escapeHtml(token.deadline) : '無期限'}</p>
-                    </div>
                     <button class="btn btn-outline-warning" onclick="reissueApplicationUrl()">
                         <i class="bi bi-arrow-clockwise"></i> URLを再発行
                     </button>
@@ -1989,6 +2218,32 @@ function renderApplicationUrl(data) {
     }
 
     content.innerHTML = html;
+}
+
+async function saveApplicationSchedule() {
+    const startVal    = document.getElementById('editApplicationStart').value || null;
+    const deadlineVal = document.getElementById('editDeadline').value || null;
+
+    // datetime-local → "YYYY-MM-DD HH:MM:SS" 形式に変換
+    const applicationStart = startVal ? startVal.replace('T', ' ') + ':00' : null;
+
+    try {
+        const res = await fetch(`/api/expeditions/${expeditionId}`, {
+            method:  'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ deadline: deadlineVal, application_start: applicationStart }),
+        });
+        const data = await res.json();
+        if (data.success) {
+            const el = document.getElementById('appScheduleSaved');
+            el.classList.remove('d-none');
+            setTimeout(() => el.classList.add('d-none'), 2000);
+        } else {
+            alert(data.error?.message || '保存に失敗しました');
+        }
+    } catch (err) {
+        alert('通信エラーが発生しました');
+    }
 }
 
 function copyApplicationUrl() {
@@ -2122,14 +2377,14 @@ function renderCollection(data) {
         return `
             <div class="accordion-item">
                 <h2 class="accordion-header">
-                    <button class="accordion-button ${roundDef.id === 1 ? '' : 'collapsed'}" type="button"
+                    <button class="accordion-button collapsed" type="button"
                             data-bs-toggle="collapse" data-bs-target="#collapseRound${roundDef.id}">
                         ${escapeHtml(roundDef.label)}
                         <span class="badge bg-secondary ms-2">${items.length}件</span>
                         ${submittedCount > 0 ? `<span class="badge bg-success ms-1">提出 ${submittedCount}</span>` : ''}
                     </button>
                 </h2>
-                <div id="collapseRound${roundDef.id}" class="accordion-collapse collapse ${roundDef.id === 1 ? 'show' : ''}">
+                <div id="collapseRound${roundDef.id}" class="accordion-collapse collapse">
                     <div class="accordion-body">
                         ${deadlineHtml}
                         ${tableHtml}

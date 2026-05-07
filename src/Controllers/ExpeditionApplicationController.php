@@ -166,6 +166,12 @@ class ExpeditionApplicationController
             }
         }
 
+        // 申込み開始日時チェック
+        if (!empty($expedition['application_start']) && strtotime($expedition['application_start']) > time()) {
+            Response::error('申し込み受付がまだ始まっていません', 400, 'NOT_STARTED');
+            return;
+        }
+
         // 申込期限チェック
         if (!empty($expedition['deadline']) && $expedition['deadline'] < date('Y-m-d')) {
             Response::error('申し込み期限を過ぎています', 400, 'DEADLINE_PASSED');
