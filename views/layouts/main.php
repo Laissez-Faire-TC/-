@@ -39,6 +39,11 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link" href="/merchandise">
+                            <i class="bi bi-bag"></i> 物販管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="/hp">
                             <i class="bi bi-globe2"></i> HP管理
                         </a>

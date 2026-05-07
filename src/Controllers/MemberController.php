@@ -163,6 +163,12 @@ class MemberController
         try {
             $id = $this->model->create($data);
             $member = $this->model->find($id);
+
+            // 物販: この学籍番号で暫定購入された注文を自動紐付け
+            if (!empty($data['student_id']) && class_exists('MerchandiseOrder')) {
+                MerchandiseOrder::matchByStudentId($data['student_id'], $id);
+            }
+
             Response::success($member, '会員を登録しました');
         } catch (Exception $e) {
             Response::error('会員の登録に失敗しました: ' . $e->getMessage(), 500, 'CREATE_ERROR');
@@ -516,6 +522,11 @@ class MemberController
                 $errorMsg = implode(', ', $result['errors']);
                 Response::error("インポート中にエラーが発生しました: {$errorMsg}", 500, 'IMPORT_ERROR');
                 return;
+            }
+
+            // 物販: 暫定購入注文の自動マッチング
+            if (class_exists('MerchandiseOrder')) {
+                MerchandiseOrder::matchAllPending();
             }
 
             Response::success($result, "{$result['imported']}名を新規登録、{$result['updated']}名を更新しました");

@@ -440,6 +440,18 @@ async function submitExpense(expeditionId) {
 </div>
 <?php endif; ?>
 
+<div class="card mb-3">
+    <div class="card-body d-flex justify-content-between align-items-center py-3">
+        <div>
+            <i class="bi bi-bag-heart text-primary"></i>
+            <span class="ms-2 small">サークルオリジナルアイテム販売</span>
+        </div>
+        <a href="/member/store" class="btn btn-outline-primary btn-sm">
+            ショップへ <i class="bi bi-chevron-right"></i>
+        </a>
+    </div>
+</div>
+
 <div class="card mb-4">
     <div class="card-body d-flex justify-content-between align-items-center py-3">
         <div>

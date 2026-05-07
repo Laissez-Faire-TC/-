@@ -136,6 +136,11 @@ class EnrollmentController
                 $memberModel = new Member();
                 $memberId = $memberModel->create($data);
 
+                // 物販: 暫定購入注文の自動マッチング
+                if (!empty($data['student_id']) && class_exists('MerchandiseOrder')) {
+                    MerchandiseOrder::matchByStudentId($data['student_id'], $memberId);
+                }
+
                 // 管理者に入会申請通知メールを送信
                 $member = $memberModel->find($memberId);
                 if ($member) {

@@ -11,11 +11,13 @@ class MemberPortalController
      */
     public function loginPage(array $params): void
     {
+        $returnTo = $this->safeReturnTo($_GET['return'] ?? null);
+
         if ($this->checkAuth()) {
-            Response::redirect('/member/home');
+            Response::redirect($returnTo ?: '/member/home');
             return;
         }
-        $this->render('member/login', []);
+        $this->render('member/login', ['returnTo' => $returnTo]);
     }
 
     /**
@@ -42,7 +44,9 @@ class MemberPortalController
             $_SESSION['member_id']   = $member['id'];
             $_SESSION['member_name'] = $member['name_kanji'];
             $_SESSION['member_login_time'] = time();
-            Response::success([], 'ログインしました');
+
+            $returnTo = $this->safeReturnTo(Request::get('return'));
+            Response::success(['redirect' => $returnTo ?: '/member/home'], 'ログインしました');
         } else {
             $debugMsg = '会員が見つかりません';
             if ($member) {
@@ -50,6 +54,18 @@ class MemberPortalController
             }
             Response::error($debugMsg, 401, 'INVALID_STUDENT_ID');
         }
+    }
+
+    /**
+     * オープンリダイレクト対策：自サイト内のパスのみ許可
+     */
+    private function safeReturnTo(?string $url): ?string
+    {
+        if (empty($url)) return null;
+        $url = (string)$url;
+        // パスのみ許可（先頭が "/" かつ "//" や "/\\" で始まらない）
+        if (!preg_match('#^/(?!/|\\\\)[^\s]*$#', $url)) return null;
+        return $url;
     }
 
     /**

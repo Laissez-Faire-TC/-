@@ -359,6 +359,51 @@ $router->delete('/api/expeditions/{id}/car-expenses/{eid}',      'ExpeditionCarE
 // レンタカー清算（会員）
 $router->post('/api/member/expedition/{id}/car-expense', 'ExpeditionCarExpenseController@memberSubmit');
 
+// ===== 物販管理 =====
+// 管理画面ページ
+$router->get('/merchandise', 'MerchandiseController@indexPage');
+$router->get('/merchandise/{id}', 'MerchandiseController@detailPage');
+
+// エクスポート（固定パスを {id} ルートより前に配置）
+$router->get('/api/merchandise/{id}/export/xlsx', 'MerchandiseExportController@xlsx');
+$router->get('/api/merchandise/{id}/export/pdf',  'MerchandiseExportController@pdf');
+
+// 未マッチ注文（暫定購入者）
+$router->get('/api/merchandise/pending-orders', 'MerchandiseController@pendingOrders');
+$router->post('/api/merchandise/pending-orders/match-all', 'MerchandiseController@matchAllPending');
+$router->post('/api/merchandise/orders/{id}/link-member', 'MerchandiseController@linkOrderToMember');
+
+// 商品 CRUD（固定パスを先に登録）
+$router->post('/api/merchandise/upload-image', 'MerchandiseController@uploadImage');
+$router->get('/api/merchandise/tokens', 'MerchandiseController@getTokens');
+$router->post('/api/merchandise/tokens', 'MerchandiseController@generateToken');
+$router->delete('/api/merchandise/tokens/{id}', 'MerchandiseController@destroyToken');
+$router->post('/api/merchandise/orders/{id}/toggle-paid', 'MerchandiseController@togglePaid');
+$router->put('/api/merchandise/orders/{id}/status', 'MerchandiseController@updateOrderStatus');
+$router->delete('/api/merchandise/orders/{id}', 'MerchandiseController@destroyOrder');
+$router->get('/api/merchandise/orders/{id}', 'MerchandiseController@showOrder');
+$router->get('/api/merchandise', 'MerchandiseController@index');
+$router->post('/api/merchandise', 'MerchandiseController@store');
+$router->get('/api/merchandise/{id}/orders', 'MerchandiseController@orders');
+$router->get('/api/merchandise/{id}/summary', 'MerchandiseController@summary');
+$router->put('/api/merchandise/{id}/colors', 'MerchandiseController@saveColors');
+$router->put('/api/merchandise/{id}/sizes', 'MerchandiseController@saveSizes');
+$router->get('/api/merchandise/{id}', 'MerchandiseController@show');
+$router->put('/api/merchandise/{id}', 'MerchandiseController@update');
+$router->delete('/api/merchandise/{id}', 'MerchandiseController@destroy');
+
+// 物販ショップ（会員）
+$router->get('/member/store', 'MerchandiseShopController@memberShop');
+$router->post('/api/member/store/checkout', 'MerchandiseShopController@memberCheckout');
+
+// 物販ショップ（暫定購入: DB未登録の入会予定者向け） - 固定パスを先に登録
+$router->get('/store/pending', 'MerchandiseShopController@pendingShop');
+$router->post('/api/store/pending/checkout', 'MerchandiseShopController@pendingCheckout');
+
+// 物販ショップ（公開URL）
+$router->get('/store/{token}', 'MerchandiseShopController@publicShop');
+$router->post('/api/store/{token}/checkout', 'MerchandiseShopController@publicCheckout');
+
 // デバッグ用（確認後削除）
 $router->get('/debug-member', 'MemberPortalController@debugMember');
 

@@ -177,6 +177,17 @@ function updateBadge() {
         </a>
     </div>
     <div class="col-md-4 col-sm-6">
+        <a href="/merchandise" class="dashboard-card card shadow-sm h-100 text-decoration-none">
+            <div class="card-body d-flex align-items-center gap-3 p-4">
+                <div class="dashboard-icon text-primary"><i class="bi bi-bag"></i></div>
+                <div>
+                    <h5 class="mb-1">物販管理</h5>
+                    <small class="text-muted">Tシャツ・パーカー等の販売・注文管理</small>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-4 col-sm-6">
         <a href="/hp" class="dashboard-card card shadow-sm h-100 text-decoration-none">
             <div class="card-body d-flex align-items-center gap-3 p-4">
                 <div class="dashboard-icon text-success"><i class="bi bi-globe2"></i></div>
